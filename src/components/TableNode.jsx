@@ -1,0 +1,132 @@
+import React from 'react';
+import { GripHorizontal, Plus, Settings, Trash2, ChevronDown, ChevronUp, Key, KeyRound, LinkIcon, FunctionSquare, X } from './Icons';
+
+export const TableNode = ({ 
+    table, tables, viewOffset, connectionMode, handleDragStart, 
+    addRow, setEditingTableId, initiateDeleteTable, toggleTableMinimize, 
+    updateRowValue, deleteRow 
+}) => {
+    return (
+        <div
+            id={`table-${table.id}`}
+            className={`absolute flex flex-col bg-white rounded shadow-lg border transition-shadow duration-200 z-10
+                ${connectionMode?.fromId === table.id ? 'ring-2 ring-blue-500 shadow-blue-200' : 'hover:shadow-xl border-gray-300'}
+            `}
+            style={{ 
+                transform: `translate(${table.x + viewOffset.x}px, ${table.y + viewOffset.y}px)`,
+                width: 'auto',
+                minWidth: '180px',
+                maxWidth: 'none',
+                touchAction: 'none'
+            }}
+        >
+            <div 
+                className={`px-2 py-2 rounded-t ${table.isMinimized ? 'rounded-b' : ''} border-b border-gray-200 flex items-center justify-between cursor-move select-none group bg-white`}
+                onMouseDown={(e) => handleDragStart(e, table.id)}
+                onTouchStart={(e) => handleDragStart(e, table.id)}
+            >
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <GripHorizontal className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <span className="font-bold text-gray-700 truncate text-sm">{table.name}</span>
+                </div>
+                
+                <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); addRow(table.id); }}
+                        className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="行を追加"
+                    >
+                        <Plus className="w-4 h-4" />
+                    </button>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); setEditingTableId(table.id); }}
+                        className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="定義編集"
+                    >
+                        <Settings className="w-4 h-4" />
+                    </button>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); initiateDeleteTable(table.id); }}
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="テーブル削除"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); toggleTableMinimize(table.id); }}
+                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded transition-colors"
+                        title={table.isMinimized ? "データ行を表示" : "データ行を隠す"}
+                    >
+                        {table.isMinimized ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </button>
+                </div>
+            </div>
+
+            <div className={`${table.isMinimized ? 'rounded-b' : ''}`}> 
+                <table className="w-full text-xs text-left border-collapse min-w-max">
+                    <thead className="text-gray-600 font-semibold select-none bg-gray-50/50">
+                        <tr>
+                            <th className="px-2 py-1.5 border-b border-gray-200 w-8 text-center text-gray-400">#</th>
+                            {table.columns.map(col => {
+                                const isDependent = col.attributeType === 'dependent';
+                                const refTable = col.reference?.tableId ? tables.find(t => t.id === col.reference.tableId) : null;
+                                const refCol = refTable?.columns.find(c => c.id === col.reference?.columnId);
+                                const refLabel = refTable && refCol ? `${refTable.name}.${refCol.name}` : '';
+
+                                if (col.isVisible === false && !col.isPk && !col.isUnique && !col.isFk) return null;
+
+                                return (
+                                    <th 
+                                        key={col.id} 
+                                        className={`px-2 py-1.5 border-b border-gray-200 border-l border-gray-100 min-w-[80px] ${isDependent ? 'bg-orange-50/50 text-orange-800' : ''}`}
+                                        title={
+                                            isDependent ? `導出項目: ${col.derivation}` : 
+                                            col.isFk && refLabel ? `参照先: ${refLabel}` : "独立項目"
+                                        }
+                                    >
+                                        <div className="flex items-center gap-1.5">
+                                            {col.isPk && <Key className="w-3 h-3 text-yellow-500 flex-shrink-0" />}
+                                            {col.isUnique && !col.isPk && <KeyRound className="w-3 h-3 text-purple-500 flex-shrink-0" />}
+                                            {col.isFk && <LinkIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />}
+                                            {isDependent && <FunctionSquare className="w-3 h-3 text-orange-500 flex-shrink-0" />}
+                                            <span>{col.name}</span>
+                                        </div>
+                                    </th>
+                                );
+                            })}
+                            <th className="px-2 py-1.5 border-b border-gray-200 w-8"></th>
+                        </tr>
+                    </thead>
+                    
+                    {!table.isMinimized && (
+                        <tbody className="bg-white">
+                            {table.rows.map((row, idx) => (
+                                <tr key={row.id} className="group hover:bg-blue-50/30">
+                                    <td className="px-2 py-1 border-b border-gray-100 text-center text-gray-300 select-none">{idx + 1}</td>
+                                    {table.columns.map(col => {
+                                        if (col.isVisible === false && !col.isPk && !col.isUnique && !col.isFk) return null;
+                                        return (
+                                        <td key={col.id} className={`p-0 border-b border-gray-100 border-l border-gray-50 ${col.attributeType === 'dependent' ? 'bg-orange-50/10' : ''}`}>
+                                            <input 
+                                                type="text" 
+                                                value={row[col.id] || ''}
+                                                onChange={(e) => updateRowValue(table.id, row.id, col.id, e.target.value)}
+                                                className="w-full h-full px-2 py-1 bg-transparent border-none outline-none focus:ring-inset focus:ring-1 focus:ring-blue-500 text-gray-700 placeholder-gray-200 leading-tight text-xs"
+                                                placeholder="..."
+                                            />
+                                        </td>
+                                    )})}
+                                    <td className="p-0 border-b border-gray-100 text-center">
+                                        <button onClick={() => deleteRow(table.id, row.id)} className="p-1 text-gray-300 hover:text-red-500 transition-colors">
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    )}
+                </table>
+            </div>
+        </div>
+    );
+};

@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+body { font-family: sans-serif; }
+/* FontAwesome icon alignment fix */
+i[class*="fa-"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
