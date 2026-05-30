@@ -1,9 +1,10 @@
 import React from 'react';
-import { Database, FilePlus, FileUp, FileDown, FileText, Grid, Plus, Code, BookOpen } from './Icons';
+import { Database, FilePlus, FileUp, FileDown, FileText, Grid, Plus, Code, BookOpen, Settings, Workflow } from './Icons';
 
 export const Header = ({ 
     projectName, setProjectName, handleNewProject, handleImportClick, handleExportJSON, fileInputRef, handleFileChange,
-    setShowPromptModal, setShowCrudModal, addTable, generateSQL, setShowHelpModal 
+    setShowPromptModal, setShowCrudModal, addTable, generateSQL, setShowHelpModal,
+    onAiGenerateData, onOpenAiSettings
 }) => {
     return (
         <div className="bg-white border-b border-gray-200 px-3 py-2 shadow-sm flex items-center justify-between z-20 h-12">
@@ -60,6 +61,25 @@ export const Header = ({
             </div>
             
             <div className="flex items-center gap-2">
+                <button 
+                    onClick={onOpenAiSettings} 
+                    className="flex items-center justify-center p-1.5 bg-white border border-gray-300 text-gray-500 rounded hover:bg-gray-50 hover:text-gray-700 shadow-sm transition-colors cursor-pointer" 
+                    title="AI・APIキー設定"
+                >
+                    <Settings className="w-4 h-4" />
+                </button>
+
+                <button 
+                    onClick={onAiGenerateData} 
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded hover:from-violet-700 hover:to-indigo-700 shadow-sm transition-all text-xs font-semibold cursor-pointer animate-in fade-in duration-200"
+                    title="AIでサンプルデータ自動生成"
+                >
+                    <Workflow className="w-3.5 h-3.5" />
+                    <span>AIサンプル生成</span>
+                </button>
+
+                <div className="h-5 w-px bg-gray-200 mx-1"></div>
+
                 <button onClick={() => setShowPromptModal(true)} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 shadow-sm transition-colors text-xs font-medium">
                     <FileText className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">指示書</span>

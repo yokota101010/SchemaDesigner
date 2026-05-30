@@ -15,11 +15,16 @@ import { SqlModal } from './components/modals/SqlModal';
 import { PromptModal } from './components/modals/PromptModal';
 import { CrudModal } from './components/modals/CrudModal';
 import { TableEditorModal } from './components/modals/TableEditorModal';
+import { AiSettingsModal } from './components/modals/AiSettingsModal';
+import { AiLoadingModal } from './components/modals/AiLoadingModal';
+import { generateMockDataWithAI } from './utils/aiDataGenerator';
 
 function SchemaDesigner() {
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
   const [aiInstructions, setAiInstructions] = useState("");
 
+  const [showAiSettingsModal, setShowAiSettingsModal] = useState(false);
+  const [showAiLoadingModal, setShowAiLoadingModal] = useState(false);
   const [showSqlModal, setShowSqlModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false); 
   const [showCrudModal, setShowCrudModal] = useState(false); 
@@ -137,6 +142,45 @@ function SchemaDesigner() {
       };
       localStorage.setItem('schema-designer-autosave-v1', JSON.stringify(saveData));
   }, [projectName, tables, relationships, crudFunctions, crudData, aiInstructions, isLoading]);
+
+  const handleAiGenerateData = async () => {
+      const apiKey = localStorage.getItem('schema-designer-gemini-apikey');
+      if (!apiKey) {
+          setShowAiSettingsModal(true);
+          alert("Gemini APIキーが設定されていません。まずは設定ボタン（🔑マーク）からキーを保存してください。");
+          return;
+      }
+
+      setShowAiLoadingModal(true);
+      try {
+          const generatedData = await generateMockDataWithAI(tables, relationships, apiKey);
+          
+          setTables(prevTables => {
+              return prevTables.map(table => {
+                  const newRows = generatedData[table.id];
+                  if (newRows && Array.isArray(newRows)) {
+                      const formattedRows = newRows.map((row, idx) => ({
+                          id: `row_ai_${Date.now()}_${idx}`,
+                          ...row
+                      }));
+                      return { 
+                          ...table, 
+                          rows: formattedRows,
+                          isMinimized: false
+                      };
+                  }
+                  return table;
+              });
+          });
+
+          alert("AIによるサンプルデータの生成が完了しました！");
+      } catch (error) {
+          console.error("AI Generation Error:", error);
+          alert(`エラーが発生しました: ${error.message}`);
+      } finally {
+          setShowAiLoadingModal(false);
+      }
+  };
 
   const handleNewProject = () => {
       requestConfirmation(
@@ -296,6 +340,7 @@ function SchemaDesigner() {
         handleExportJSON={handleExportJSON} fileInputRef={fileInputRef} handleFileChange={handleFileChange}
         setShowPromptModal={setShowPromptModal} setShowCrudModal={setShowCrudModal}
         addTable={() => addTable(canvasRef)} generateSQL={generateSQL} setShowHelpModal={setShowHelpModal}
+        onAiGenerateData={handleAiGenerateData} onOpenAiSettings={() => setShowAiSettingsModal(true)}
       />
       
       <Canvas 
@@ -340,6 +385,9 @@ function SchemaDesigner() {
         onComplete={handleCompleteEdit}
         onCancel={handleCancelEdit}
       />
+      
+      <AiSettingsModal showModal={showAiSettingsModal} setShowModal={setShowAiSettingsModal} />
+      <AiLoadingModal showModal={showAiLoadingModal} />
       
       <ConfirmModal confirmation={confirmation} setConfirmation={setConfirmation} handleConfirmAction={handleConfirmAction} />
     </div>
