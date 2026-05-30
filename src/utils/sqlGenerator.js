@@ -1,22 +1,35 @@
 export const generateSQL = (tables, relationships) => {
   let sql = '';
   
-  const columnFks = []; 
-  tables.forEach(t => {
-      t.columns.forEach(c => {
-          if (c.isFk && c.reference && c.reference.tableId && c.reference.columnId) {
-              const targetTable = tables.find(tbl => tbl.id === c.reference.tableId);
-              const targetCol = targetTable?.columns.find(col => col.id === c.reference.columnId);
-              if (targetTable && targetCol) {
-                  columnFks.push({
-                      fromTable: t.name,
-                      fromCol: c.name,
-                      toTable: targetTable.name,
-                      toCol: targetCol.name
+  // 複合外部キーに対応した外部キー制約の抽出
+  const tableFks = []; 
+  relationships.forEach(rel => {
+      if (rel.mappings && rel.mappings.length > 0) {
+          const parentTable = tables.find(t => t.id === rel.from);
+          const childTable = tables.find(t => t.id === rel.to);
+          
+          if (parentTable && childTable) {
+              const mappings = [];
+              rel.mappings.forEach(m => {
+                  const parentCol = parentTable.columns.find(c => c.id === m.parentColId);
+                  const childCol = childTable.columns.find(c => c.id === m.childColId);
+                  if (parentCol && childCol) {
+                      mappings.push({
+                          parentColName: parentCol.name,
+                          childColName: childCol.name
+                      });
+                  }
+              });
+
+              if (mappings.length > 0) {
+                  tableFks.push({
+                      fromTable: childTable.name,  // 子テーブル
+                      toTable: parentTable.name,   // 親テーブル
+                      mappings: mappings
                   });
               }
           }
-      });
+      }
   });
 
   tables.forEach(table => {
@@ -54,10 +67,13 @@ export const generateSQL = (tables, relationships) => {
   });
   sql += '\n';
 
-  if (columnFks.length > 0) {
-      sql += `-- Foreign Keys (Defined in Columns)\n`;
-      columnFks.forEach(fk => {
-          sql += `ALTER TABLE ${fk.fromTable} ADD CONSTRAINT fk_${fk.fromTable}_${fk.fromCol} FOREIGN KEY (${fk.fromCol}) REFERENCES ${fk.toTable}(${fk.toCol});\n`;
+  if (tableFks.length > 0) {
+      sql += `-- Foreign Keys (Support Composite Foreign Keys)\n`;
+      tableFks.forEach(fk => {
+          const childCols = fk.mappings.map(m => m.childColName).join(', ');
+          const parentCols = fk.mappings.map(m => m.parentColName).join(', ');
+          const constraintName = `fk_${fk.fromTable}_to_${fk.toTable}_` + fk.mappings.map(m => m.childColName).join('_');
+          sql += `ALTER TABLE ${fk.fromTable} ADD CONSTRAINT ${constraintName} FOREIGN KEY (${childCols}) REFERENCES ${fk.toTable}(${parentCols});\n`;
       });
       sql += '\n';
   } 

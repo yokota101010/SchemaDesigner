@@ -14,6 +14,48 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
       setRelationships(updatedRels);
   }, [relationships]);
 
+  // --- relationships と各テーブルカラムの isFk/reference を完全同期するラッパー ---
+  const updateRelationshipsAndSync = useCallback((newRels) => {
+      setRelationships(newRels);
+      setTables(prevTables => {
+          return prevTables.map(table => {
+              // このテーブルが子テーブルとなるマッピング情報を集約
+              const childRels = newRels.filter(r => r.to === table.id && r.from && r.mappings);
+              const mappedCols = new Map(); // childColId -> { tableId, columnId }
+
+              childRels.forEach(rel => {
+                  rel.mappings.forEach(m => {
+                      if (m.childColId) {
+                          mappedCols.set(m.childColId, {
+                              tableId: rel.from,
+                              columnId: m.parentColId || ''
+                          });
+                      }
+                  });
+              });
+
+              const updatedColumns = table.columns.map(col => {
+                  const fkInfo = mappedCols.get(col.id);
+                  if (fkInfo) {
+                      return {
+                          ...col,
+                          isFk: true,
+                          reference: fkInfo
+                      };
+                  } else {
+                      return {
+                          ...col,
+                          isFk: false,
+                          reference: undefined
+                      };
+                  }
+              });
+
+              return { ...table, columns: updatedColumns };
+          });
+      });
+  }, [setRelationships, setTables]);
+
   // --- Table Operations ---
   const addTable = (canvasRef) => {
     const centerX = -viewOffset.x + (canvasRef.current ? canvasRef.current.clientWidth / 2 : 100);
@@ -35,7 +77,11 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
 
   const deleteTable = (id) => {
     setTables(prev => prev.filter(t => t.id !== id));
-    setRelationships(prev => prev.filter(r => r.from !== id && r.to !== id));
+    
+    // テーブル削除に伴い、関連するリレーションシップも削除・同期
+    const remainingRels = relationships.filter(r => r.from !== id && r.to !== id);
+    updateRelationshipsAndSync(remainingRels);
+
     if (selectedRelId) setSelectedRelId(null);
     if (editingTableId === id) setEditingTableId(null);
   };
@@ -89,6 +135,24 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
       }
       return t;
     }));
+
+    // 削除されたカラムに関連するリレーションシップのマッピングも自動削除・同期
+    const cleanedRels = relationships.map(rel => {
+        if (rel.to === tableId && rel.mappings) {
+            return {
+                ...rel,
+                mappings: rel.mappings.filter(m => m.childColId !== colId)
+            };
+        }
+        if (rel.from === tableId && rel.mappings) {
+            return {
+                ...rel,
+                mappings: rel.mappings.filter(m => m.parentColId !== colId)
+            };
+        }
+        return rel;
+    });
+    updateRelationshipsAndSync(cleanedRels);
   };
 
   const updateColumn = (tableId, colId, field, value) => {
@@ -161,6 +225,70 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
     }));
   };
 
+  // --- Dynamic FK Columns Operations ---
+  const addFkRelationship = (childTableId) => {
+      const newId = `rel_${Date.now()}`;
+      const newRels = [...relationships, {
+          id: newId,
+          from: '', 
+          to: childTableId,
+          type: 'non_identifying',
+          mappings: []
+      }];
+      updateRelationshipsAndSync(newRels);
+  };
+
+  const updateFkRelationshipParent = (relId, parentTableId) => {
+      const newRels = relationships.map(r => {
+          if (r.id === relId) {
+              return {
+                  ...r,
+                  from: parentTableId,
+                  mappings: [] // 親が変わるため、マッピングはリセット
+              };
+          }
+          return r;
+      });
+      updateRelationshipsAndSync(newRels);
+  };
+
+  const toggleFkMapping = (relId, childColId, isChecked) => {
+      const newRels = relationships.map(r => {
+          if (r.id === relId) {
+              let newMappings = r.mappings ? [...r.mappings] : [];
+              if (isChecked) {
+                  if (!newMappings.some(m => m.childColId === childColId)) {
+                      newMappings.push({
+                          parentColId: '',
+                          childColId: childColId
+                      });
+                  }
+              } else {
+                  newMappings = newMappings.filter(m => m.childColId !== childColId);
+              }
+              return { ...r, mappings: newMappings };
+          }
+          return r;
+      });
+      updateRelationshipsAndSync(newRels);
+  };
+
+  const updateFkMappingParentCol = (relId, childColId, parentColId) => {
+      const newRels = relationships.map(r => {
+          if (r.id === relId) {
+              const newMappings = r.mappings ? r.mappings.map(m => {
+                  if (m.childColId === childColId) {
+                      return { ...m, parentColId: parentColId };
+                  }
+                  return m;
+              }) : [];
+              return { ...r, mappings: newMappings };
+          }
+          return r;
+      });
+      updateRelationshipsAndSync(newRels);
+  };
+
   // --- Connections ---
   const startConnectionMode = (tableId) => {
     if (connectionMode) {
@@ -182,18 +310,21 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
              (r.from === targetTableId && r.to === connectionMode.fromId)
     );
     if (!exists) {
-        setRelationships([...relationships, {
+        const newRels = [...relationships, {
             id: `rel_${Date.now()}`,
             from: connectionMode.fromId, 
             to: targetTableId,           
-            type: 'non_identifying'
-        }]);
+            type: 'non_identifying',
+            mappings: [] // マッピング初期値
+        }];
+        updateRelationshipsAndSync(newRels);
     }
     setConnectionMode(null);
   };
 
   const deleteRelationship = (relId) => {
-    setRelationships(relationships.filter(r => r.id !== relId));
+    const newRels = relationships.filter(r => r.id !== relId);
+    updateRelationshipsAndSync(newRels);
     if (selectedRelId === relId) setSelectedRelId(null);
   };
 
@@ -208,6 +339,7 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
     updateTableName, toggleTableMinimize,
     addColumn, deleteColumn, updateColumn, updateColumnReference,
     addRow, deleteRow, updateRowValue,
-    startConnectionMode, handleConnect, deleteRelationship
+    startConnectionMode, handleConnect, deleteRelationship,
+    addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol
   };
 };

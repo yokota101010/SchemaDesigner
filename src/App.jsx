@@ -52,8 +52,35 @@ function SchemaDesigner() {
       addTable, deleteTable, initiateDeleteTable, updateTableName,
       toggleTableMinimize, addColumn, deleteColumn, updateColumn,
       updateColumnReference, addRow, deleteRow, updateRowValue,
-      startConnectionMode, handleConnect, deleteRelationship
+      startConnectionMode, handleConnect, deleteRelationship,
+      addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol
   } = schemaState;
+
+  const [backupTables, setBackupTables] = useState(null);
+  const [backupRelationships, setBackupRelationships] = useState(null);
+
+  useEffect(() => {
+      if (editingTableId) {
+          setBackupTables(JSON.parse(JSON.stringify(tables)));
+          setBackupRelationships(JSON.parse(JSON.stringify(relationships)));
+      } else {
+          setBackupTables(null);
+          setBackupRelationships(null);
+      }
+  }, [editingTableId]);
+
+  const handleCancelEdit = () => {
+      if (backupTables && backupRelationships) {
+          setTables(backupTables);
+          setRelationships(backupRelationships);
+      }
+      setEditingTableId(null);
+  };
+
+  const handleCompleteEdit = () => {
+      autoUpdateRelationshipType(tables);
+      setEditingTableId(null);
+  };
 
   const crudState = useCrudState(requestConfirmation);
   const {
@@ -304,10 +331,14 @@ function SchemaDesigner() {
       
       <TableEditorModal 
         editingTable={editingTable} tables={tables} 
-        setEditingTableId={setEditingTableId} autoUpdateRelationshipType={autoUpdateRelationshipType}
         initiateDeleteTable={initiateDeleteTable} updateTableName={updateTableName} 
         addColumn={addColumn} updateColumn={updateColumn} 
-        updateColumnReference={updateColumnReference} deleteColumn={deleteColumn} 
+        deleteColumn={deleteColumn} 
+        relationships={relationships} deleteRelationship={deleteRelationship}
+        addFkRelationship={addFkRelationship} updateFkRelationshipParent={updateFkRelationshipParent}
+        toggleFkMapping={toggleFkMapping} updateFkMappingParentCol={updateFkMappingParentCol}
+        onComplete={handleCompleteEdit}
+        onCancel={handleCancelEdit}
       />
       
       <ConfirmModal confirmation={confirmation} setConfirmation={setConfirmation} handleConfirmAction={handleConfirmAction} />

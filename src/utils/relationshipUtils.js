@@ -17,7 +17,8 @@ export const syncRelationshipsWithTables = (currentTables, currentRelationships)
                       id: existingRel ? existingRel.id : `rel_${parentTable.id}_${table.id}`,
                       from: parentTable.id,
                       to: table.id,
-                      type: type
+                      type: type,
+                      mappings: existingRel ? (existingRel.mappings || []) : []
                   });
               }
           }
