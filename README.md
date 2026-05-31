@@ -65,3 +65,8 @@ npm run build
 - **スタイリング**: [Tailwind CSS](https://tailwindcss.com/) (v4)
 - **アイコン**: [FontAwesome](https://fontawesome.com/) (CDN経由で読み込み)
 - **プラグイン**: [vite-plugin-singlefile](https://www.npmjs.com/package/vite-plugin-singlefile) (アセットのインライン化)
+
+## ライセンス
+
+このプロジェクトは [MIT License](LICENSE) の下で公開されています。
+
