@@ -1,0 +1,316 @@
+{
+  "name": "Tutorial Project (Composite Key Demo)",
+  "tables": [
+    {
+      "id": "table_1780214186481",
+      "name": "費目",
+      "x": 309,
+      "y": 125.5,
+      "isMinimized": false,
+      "columns": [
+        {
+          "id": "col_1780214186481",
+          "name": "費目C",
+          "type": "INT",
+          "isPk": true,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214237001",
+          "name": "費目名",
+          "type": "VARCHAR(255)",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214258748",
+          "name": "収支区分",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "row_ai_1780214698134_0",
+          "col_1780214186481": "101",
+          "col_1780214237001": "給与収入",
+          "col_1780214258748": "1"
+        },
+        {
+          "id": "row_ai_1780214698134_1",
+          "col_1780214186481": "102",
+          "col_1780214237001": "副業収入",
+          "col_1780214258748": "1"
+        },
+        {
+          "id": "row_ai_1780214698134_2",
+          "col_1780214186481": "201",
+          "col_1780214237001": "食費",
+          "col_1780214258748": "-1"
+        },
+        {
+          "id": "row_ai_1780214698134_3",
+          "col_1780214186481": "202",
+          "col_1780214237001": "交通費",
+          "col_1780214258748": "-1"
+        },
+        {
+          "id": "row_ai_1780214698134_4",
+          "col_1780214186481": "203",
+          "col_1780214237001": "家賃",
+          "col_1780214258748": "-1"
+        }
+      ]
+    },
+    {
+      "id": "table_1780214349756",
+      "name": "月次収支取引サマリ",
+      "x": 510,
+      "y": 354.5,
+      "isMinimized": false,
+      "columns": [
+        {
+          "id": "col_1780214349756",
+          "name": "費目C",
+          "type": "INT",
+          "isPk": true,
+          "isUnique": false,
+          "isFk": true,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true,
+          "reference": {
+            "tableId": "table_1780214186481",
+            "columnId": "col_1780214186481"
+          }
+        },
+        {
+          "id": "col_1780214406754",
+          "name": "年月",
+          "type": "DATE",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214437092",
+          "name": "取引合計額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        }
+      ],
+      "rows": [
+        {
+          "id": "row_ai_1780214698134_0",
+          "col_1780214349756": "101",
+          "col_1780214406754": "2023-10-01",
+          "col_1780214437092": "350000"
+        },
+        {
+          "id": "row_ai_1780214698134_1",
+          "col_1780214349756": "201",
+          "col_1780214406754": "2023-10-01",
+          "col_1780214437092": "-8500"
+        },
+        {
+          "id": "row_ai_1780214698134_2",
+          "col_1780214349756": "202",
+          "col_1780214406754": "2023-10-01",
+          "col_1780214437092": "-4500"
+        },
+        {
+          "id": "row_ai_1780214698134_3",
+          "col_1780214349756": "203",
+          "col_1780214406754": "2023-10-01",
+          "col_1780214437092": "-120000"
+        }
+      ]
+    },
+    {
+      "id": "table_1780214495778",
+      "name": "収支取引明細",
+      "x": 729,
+      "y": 571.5,
+      "isMinimized": false,
+      "columns": [
+        {
+          "id": "col_1780214495778",
+          "name": "取引No",
+          "type": "INT",
+          "isPk": true,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214523854",
+          "name": "取引日",
+          "type": "DATE",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214537089",
+          "name": "費目C",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": true,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true,
+          "reference": {
+            "tableId": "table_1780214349756",
+            "columnId": "col_1780214349756"
+          }
+        },
+        {
+          "id": "col_1780214557822",
+          "name": "取引額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214571954",
+          "name": "摘要",
+          "type": "VARCHAR(255)",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214586990",
+          "name": "年月",
+          "type": "VARCHAR(255)",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": true,
+          "attributeType": "dependent",
+          "derivation": "取引日の年月部分",
+          "isVisible": true,
+          "reference": {
+            "tableId": "table_1780214349756",
+            "columnId": "col_1780214406754"
+          }
+        }
+      ],
+      "rows": [
+        {
+          "id": "row_ai_1780214698134_0",
+          "col_1780214495778": "1",
+          "col_1780214537089": "101",
+          "col_1780214586990": "2023-10-01",
+          "col_1780214523854": "2023-10-25",
+          "col_1780214557822": "350000",
+          "col_1780214571954": "10月給与"
+        },
+        {
+          "id": "row_ai_1780214698134_1",
+          "col_1780214495778": "2",
+          "col_1780214537089": "201",
+          "col_1780214586990": "2023-10-01",
+          "col_1780214523854": "2023-10-03",
+          "col_1780214557822": "-5000",
+          "col_1780214571954": "スーパーでの食料品購入"
+        },
+        {
+          "id": "row_ai_1780214698134_2",
+          "col_1780214495778": "3",
+          "col_1780214537089": "201",
+          "col_1780214586990": "2023-10-01",
+          "col_1780214523854": "2023-10-10",
+          "col_1780214557822": "-3500",
+          "col_1780214571954": "外食費"
+        },
+        {
+          "id": "row_ai_1780214698134_3",
+          "col_1780214495778": "4",
+          "col_1780214537089": "202",
+          "col_1780214586990": "2023-10-01",
+          "col_1780214523854": "2023-10-15",
+          "col_1780214557822": "-4500",
+          "col_1780214571954": "バス・電車代"
+        },
+        {
+          "id": "row_ai_1780214698134_4",
+          "col_1780214495778": "5",
+          "col_1780214537089": "203",
+          "col_1780214586990": "2023-10-01",
+          "col_1780214523854": "2023-10-20",
+          "col_1780214557822": "-120000",
+          "col_1780214571954": "10月分家賃"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel_1780214471946",
+      "from": "table_1780214186481",
+      "to": "table_1780214349756",
+      "type": "identifying",
+      "mappings": [
+        {
+          "parentColId": "col_1780214186481",
+          "childColId": "col_1780214349756"
+        }
+      ]
+    },
+    {
+      "id": "rel_1780214624209",
+      "from": "table_1780214349756",
+      "to": "table_1780214495778",
+      "type": "non_identifying",
+      "mappings": [
+        {
+          "parentColId": "col_1780214349756",
+          "childColId": "col_1780214537089"
+        },
+        {
+          "parentColId": "col_1780214406754",
+          "childColId": "col_1780214586990"
+        }
+      ]
+    }
+  ],
+  "crudFunctions": [],
+  "crudData": {},
+  "aiInstructions": "",
+  "version": "1.3",
+  "exportedAt": "2026-05-31T08:10:25.576Z"
+}

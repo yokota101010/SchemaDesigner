@@ -1,28 +1,8 @@
 import React from 'react';
+import { getTableRect, generateOrthogonalPath } from '../utils/layoutUtils';
 
 export const RelationshipLines = ({ relationships, tables, viewOffset }) => {
-    const getTableRect = (table) => {
-        const minWidth = 180; 
-        const colWidth = 100; 
-        const estimatedWidth = Math.max(minWidth, table.columns.length * colWidth + 60);
-        
-        const headerHeight = 40; 
-        const colHeaderHeight = 30; 
-        const rowHeight = 30; 
-        const footerHeight = 0; 
-        
-        let height = headerHeight + colHeaderHeight; 
-        if (!table.isMinimized) {
-            height += (table.rows.length * rowHeight) + footerHeight;
-        }
-        
-        return {
-            x: table.x + viewOffset.x,
-            y: table.y + viewOffset.y,
-            width: estimatedWidth,
-            height
-        };
-    };
+
 
     return (
         <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-0 overflow-visible">
@@ -40,8 +20,8 @@ export const RelationshipLines = ({ relationships, tables, viewOffset }) => {
                 const toTable = tables.find(t => t.id === rel.to);
                 if (!fromTable || !toTable) return null;
 
-                const fromRect = getTableRect(fromTable);
-                const toRect = getTableRect(toTable);
+                const fromRect = getTableRect(fromTable, viewOffset);
+                const toRect = getTableRect(toTable, viewOffset);
 
                 const isChildBelow = toRect.y > fromRect.y;
 
@@ -59,15 +39,14 @@ export const RelationshipLines = ({ relationships, tables, viewOffset }) => {
                 const yOffset = (index - (total - 1) / 2) * gap;
 
                 const startX = fromRect.x + 24; 
-                const startY = isChildBelow ? (fromRect.y + fromRect.height) : fromRect.y;
+                // テーブルの境界から 8px 離れた位置を、関連線（および横棒マーカー）の出発点にします
+                const startY = isChildBelow ? (fromRect.y + fromRect.height + 8) : (fromRect.y - 8);
 
                 const endX = toRect.x;
                 const endY = toRect.y + toRect.height / 2 + yOffset;
 
-                const cx = startX;
-                const cy = endY;
-
-                const pathData = `M ${startX} ${startY} Q ${cx} ${cy}, ${endX} ${endY}`;
+                // 共通ユーティリティを使用して直角角丸パスデータを生成
+                const pathData = generateOrthogonalPath(startX, startY, endX, endY, isChildBelow);
                 
                 const isIdentifying = rel.type === 'identifying';
                 const color = "#64748b";

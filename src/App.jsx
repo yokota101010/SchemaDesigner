@@ -17,6 +17,7 @@ import { CrudModal } from './components/modals/CrudModal';
 import { TableEditorModal } from './components/modals/TableEditorModal';
 import { AiSettingsModal } from './components/modals/AiSettingsModal';
 import { AiLoadingModal } from './components/modals/AiLoadingModal';
+import { AiGeneratePromptModal } from './components/modals/AiGeneratePromptModal';
 import { generateMockDataWithAI } from './utils/aiDataGenerator';
 
 function SchemaDesigner() {
@@ -25,6 +26,10 @@ function SchemaDesigner() {
 
   const [showAiSettingsModal, setShowAiSettingsModal] = useState(false);
   const [showAiLoadingModal, setShowAiLoadingModal] = useState(false);
+  const [showAiGeneratePromptModal, setShowAiGeneratePromptModal] = useState(false);
+  const [aiDataInstructions, setAiDataInstructions] = useState(() => {
+      return localStorage.getItem('schema-designer-ai-data-instructions') || '';
+  });
   const [showSqlModal, setShowSqlModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false); 
   const [showCrudModal, setShowCrudModal] = useState(false); 
@@ -143,17 +148,28 @@ function SchemaDesigner() {
       localStorage.setItem('schema-designer-autosave-v1', JSON.stringify(saveData));
   }, [projectName, tables, relationships, crudFunctions, crudData, aiInstructions, isLoading]);
 
-  const handleAiGenerateData = async () => {
+  const handleAiGenerateData = () => {
       const apiKey = localStorage.getItem('schema-designer-gemini-apikey');
       if (!apiKey) {
           setShowAiSettingsModal(true);
           alert("Gemini APIキーが設定されていません。まずは設定ボタン（🔑マーク）からキーを保存してください。");
           return;
       }
+      setShowAiGeneratePromptModal(true);
+  };
+
+  const handleExecuteAiGenerateData = async () => {
+      setShowAiGeneratePromptModal(false);
+
+      const apiKey = localStorage.getItem('schema-designer-gemini-apikey');
+      if (!apiKey) return;
+
+      // ユーザーの指示をローカルストレージに記憶
+      localStorage.setItem('schema-designer-ai-data-instructions', aiDataInstructions);
 
       setShowAiLoadingModal(true);
       try {
-          const generatedData = await generateMockDataWithAI(tables, relationships, apiKey);
+          const generatedData = await generateMockDataWithAI(tables, relationships, apiKey, 3, aiDataInstructions);
           
           setTables(prevTables => {
               return prevTables.map(table => {
@@ -388,6 +404,13 @@ function SchemaDesigner() {
       
       <AiSettingsModal showModal={showAiSettingsModal} setShowModal={setShowAiSettingsModal} />
       <AiLoadingModal showModal={showAiLoadingModal} />
+      <AiGeneratePromptModal 
+        showModal={showAiGeneratePromptModal} 
+        setShowModal={setShowAiGeneratePromptModal} 
+        promptText={aiDataInstructions} 
+        setPromptText={setAiDataInstructions} 
+        onGenerate={handleExecuteAiGenerateData} 
+      />
       
       <ConfirmModal confirmation={confirmation} setConfirmation={setConfirmation} handleConfirmAction={handleConfirmAction} />
     </div>

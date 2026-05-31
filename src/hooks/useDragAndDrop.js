@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { getTableRect, generateOrthogonalPath } from '../utils/layoutUtils';
 
 export const useDragAndDrop = (tables, setTables, relationships, viewOffset, setViewOffset) => {
   const [draggingId, setDraggingId] = useState(null);
@@ -71,25 +72,8 @@ export const useDragAndDrop = (tables, setTables, relationships, viewOffset, set
                     if (!fromTable || !toTable) return;
 
                     const getRect = (table) => {
-                        let tx = table.id === draggingId ? newX : table.x;
-                        let ty = table.id === draggingId ? newY : table.y;
-                        
-                        const minWidth = 180; 
-                        const colWidth = 100; 
-                        const estimatedWidth = Math.max(minWidth, table.columns.length * colWidth + 60);
-                        
-                        const headerHeight = 40; 
-                        const colHeaderHeight = 30; 
-                        const rowHeight = 30; 
-                        let height = headerHeight + colHeaderHeight; 
-                        if (!table.isMinimized) { height += (table.rows.length * rowHeight); }
-                        
-                        return {
-                            x: tx + viewOffset.x,
-                            y: ty + viewOffset.y,
-                            width: estimatedWidth,
-                            height
-                        };
+                        const dragPos = table.id === draggingId ? { x: newX, y: newY } : null;
+                        return getTableRect(table, viewOffset, dragPos);
                     };
 
                     const fromRect = getRect(fromTable);
@@ -112,13 +96,13 @@ export const useDragAndDrop = (tables, setTables, relationships, viewOffset, set
                     const yOffset = (index - (total - 1) / 2) * gap;
 
                     const startX = fromRect.x + 24; 
-                    const startY = isChildBelow ? (fromRect.y + fromRect.height) : fromRect.y;
+                    // テーブルの境界から 8px 離れた位置を、関連線（および横棒マーカー）の出発点にします
+                    const startY = isChildBelow ? (fromRect.y + fromRect.height + 8) : (fromRect.y - 8);
                     const endX = toRect.x;
                     const endY = toRect.y + toRect.height / 2 + yOffset;
-                    const cx = startX;
-                    const cy = endY;
 
-                    const pathData = `M ${startX} ${startY} Q ${cx} ${cy}, ${endX} ${endY}`;
+                    // 共通ユーティリティを使用して直角角丸パスデータを生成
+                    const pathData = generateOrthogonalPath(startX, startY, endX, endY, isChildBelow);
                     
                     const gEl = document.getElementById(`rel-${rel.id}`);
                     if (gEl) {

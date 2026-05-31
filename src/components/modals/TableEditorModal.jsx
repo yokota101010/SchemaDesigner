@@ -19,8 +19,8 @@ export const TableEditorModal = ({
     // カラムの中に「導出項目」が1つでも存在するか判定
     const hasDependentColumn = editingTable.columns.some(c => c.attributeType === 'dependent');
 
-    // 動的にテーブルの最小幅を計算 (基本列幅[導出あり800px / なし620px] ＋ 1列のFKごとに192px追加)
-    const baseWidth = hasDependentColumn ? 800 : 620;
+    // 動的にテーブルの最小幅を計算 (基本列幅[導出あり960px / なし780px] ＋ 1列のFKごとに192px追加)
+    const baseWidth = hasDependentColumn ? 960 : 780;
     const tableMinWidth = baseWidth + (tableRels.length * 192);
 
     return (
@@ -85,6 +85,7 @@ export const TableEditorModal = ({
                                         <th className="px-3 py-2" style={{ width: '130px', minWidth: '130px' }}>データ型</th>
                                         <th className="px-3 py-2 text-center" style={{ width: '45px', minWidth: '45px' }}>UQ</th>
                                         <th className="px-3 py-2" style={{ width: '110px', minWidth: '110px' }}>区分</th>
+                                        <th className="px-3 py-2" style={{ width: '160px', minWidth: '160px' }}>説明 (AIへの指示)</th>
                                         {hasDependentColumn && (
                                             <th className="px-3 py-2" style={{ width: '180px', minWidth: '180px' }}>詳細設定 (導出)</th>
                                         )}
@@ -185,6 +186,17 @@ export const TableEditorModal = ({
                                                     >
                                                         {ATTRIBUTE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                                                     </select>
+                                                </td>
+
+                                                {/* 説明 */}
+                                                <td className="px-3 py-1.5">
+                                                    <input
+                                                        type="text"
+                                                        value={col.description || ''}
+                                                        onChange={(e) => updateColumn(editingTable.id, col.id, 'description', e.target.value)}
+                                                        className="w-full bg-white border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none text-xs"
+                                                        placeholder="例: 有効/無効、1〜50の範囲"
+                                                    />
                                                 </td>
 
                                                 {/* 詳細設定 (導出) */}
