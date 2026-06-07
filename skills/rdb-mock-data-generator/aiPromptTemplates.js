@@ -72,3 +72,25 @@ export const AI_PROMPT_GENERATION_RULES = (rowCount, pkColumnId) => `
 4. **Primary Key Uniqueness**: Ensure all generated rows have unique values for the primary key ('${pkColumnId}').
 5. **Key Names**: Populate the JSON fields precisely using the Column IDs (like 'b1', 'e2', 't4', etc.) as the object keys.
 `;
+
+
+// --- 第2段階 (導出計算) 用のプロンプト定数 ---
+
+/**
+ * 第2段階用の計算アシスタント役割定義
+ */
+export const AI_PROMPT_DERIVATION_ROLE = (tableName) =>
+    `You are a database calculation assistant.\nYour task is to calculate and fill in the values for the derived (dependent) columns of the table '${tableName}'.\n`;
+
+/**
+ * 第2段階の計算に関するルール
+ */
+export const AI_PROMPT_DERIVATION_RULES = `
+### Calculation Rules (CRITICAL):
+1. **Calculate independently for each row**: You must evaluate each row in 'Target Table' one by one. Read the values in its key/relationship columns (e.g., matching category code, date, or IDs), filter the related tables' data by those exact values, and calculate the derived value based on that filtered subset.
+2. **DO NOT copy-paste values across different rows**: It is a critical error to calculate a value for one row and copy that same value (e.g., '7500') to all other rows. Each row has different key conditions and MUST have its own calculated value.
+3. **Match column IDs with Physics Names**: Use 'Columns Map' provided for both target and related tables to translate formulas (written in Physics Names, e.g., 'SUM(収支取引明細.取引額)') into column ID matches (e.g., summing column '取引額' from the rows of '収支取引明細' where the category code '費目C' matches the current row's category code).
+4. **Handle empty matches**: If no matching records exist in the related tables for a given row's keys, compute the value as '0' or an appropriate empty value, rather than copying a value from another row.
+5. **Schema and row integrity**: You MUST return the EXACT same number of rows (with the same 'id' and other existing column values). Do NOT add, delete, or reorder any rows. Only populate the derived/dependent columns.
+6. **Handle sequential carry-over (accumulation)**: If a derived column formula references a previous period, previous row, or cumulative value (e.g., '前月の...', '前行の...', '繰越金', '累積'), evaluate the rows sequentially in the exact order they are presented. The input rows have been pre-sorted by the specified logical order to ensure correctness. Carry over the calculated values sequentially from top to bottom.
+`;

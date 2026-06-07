@@ -1,16 +1,8 @@
 /**
  * Google Gemini API と連携してサンプルデータを自動生成するユーティリティ
  */
-import { 
-    AI_PROMPT_SYSTEM_ROLE,
-    AI_PROMPT_REFERENTIAL_INTEGRITY_HEADER,
-    AI_PROMPT_SEMANTIC_CONSISTENCY_HEADER,
-    AI_PROMPT_DERIVED_COLUMNS_HEADER,
-    AI_PROMPT_EXISTING_DATA_HEADER,
-    AI_PROMPT_USER_INSTRUCTIONS_HEADER,
-    AI_PROMPT_GENERATION_RULES
-} from '../../skills/rdb-mock-data-generator/aiPromptTemplates';
-
+import { buildSingleTableResponseSchema, buildSingleTableDerivationSchema } from './aiSchemaBuilder.js';
+import { buildSingleTablePrompt, buildSingleTableDerivationPrompt } from './aiPromptBuilder.js';
 
 /**
  * レートリミット（429）やサーバー一時エラーに対応するための指数バックオフ付き自動リトライfetch
@@ -108,143 +100,64 @@ export const getDependencyLevels = (tables, relationships) => {
 };
 
 /**
- * 単一のテーブル定義に基づいて Gemini API 用の動的 JSON Schema を構築する
+ * 単一テーブルの導出計算用APIコール関数
  */
-const buildSingleTableResponseSchema = (table, parentData = {}) => {
-    const columnProps = {};
-    
-    table.columns.forEach(col => {
-        let desc = `Value for column '${col.name}' (${col.type})`;
-        if (col.description) desc += ` [Business Rule/Instruction: ${col.description}]`;
-        if (col.isPk) desc += ' [Primary Key - MUST BE UNIQUE]';
-        if (col.isUnique) desc += ' [Unique constraint]';
-        if (col.isFk) {
-            const parentTableId = col.reference?.tableId;
-            desc += ` [Foreign Key referencing tableId: '${parentTableId || ''}']`;
-            
-            // 親データのPK候補リストをスキーマの説明に埋め込むことで、LLMへの制約を強化する
-            if (parentTableId && parentData[parentTableId]) {
-                const parentKeys = parentData[parentTableId]
-                    .map(row => row[col.reference.columnId])
-                    .filter(Boolean);
-                if (parentKeys.length > 0) {
-                    desc += ` MUST BE EXACTLY ONE OF THESE VALUES: ${JSON.stringify(parentKeys)}`;
-                }
-            }
-        }
-        if (col.attributeType === 'dependent') {
-            desc += ` [Derived Item computed by: ${col.derivation || ''}]`;
-        }
+const calculateSingleTableDerivations = async (table, currentTableData, allGeneratedData, apiKey, tables) => {
+    const prompt = buildSingleTableDerivationPrompt(table, currentTableData, allGeneratedData, tables);
+    const responseSchema = buildSingleTableDerivationSchema(table, allGeneratedData);
 
-        columnProps[col.id] = {
-            type: 'string',
-            description: desc
-        };
-    });
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-    return {
-        type: 'object',
-        properties: {
-            rows: {
-                type: 'array',
-                description: `List of realistic row objects for table '${table.name}'`,
-                items: {
-                    type: 'object',
-                    properties: columnProps,
-                    // 主キー、外部キー、導出項目は入力必須にする
-                    required: table.columns.filter(col => col.isPk || col.isFk || col.attributeType === 'dependent').map(col => col.id)
-                }
-            }
+    const response = await fetchWithRetry(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
         },
-        required: ['rows']
-    };
-};
-
-/**
- * 単一テーブル用のプロンプトを構築する
- */
-const buildSingleTablePrompt = (table, relationships, parentData = {}, rowCount = 3, aiInstructions = '') => {
-    let prompt = AI_PROMPT_SYSTEM_ROLE(table.name, table.id) + `\n\n### Table Columns:\n`;
-
-    table.columns.forEach(c => {
-        prompt += `- Column ID: '${c.id}', Physics Name: '${c.name}', Data Type: '${c.type}', PK: ${c.isPk}, UQ: ${c.isUnique}, FK: ${c.isFk}`;
-        if (c.description) {
-            prompt += `, Description/Instruction: "${c.description}"`;
-        }
-        if (c.attributeType === 'dependent') {
-            prompt += `, Derived Formula: [${c.derivation}]`;
-        }
-        prompt += '\n';
+        body: JSON.stringify({
+            contents: [
+                {
+                    parts: [
+                        { text: prompt }
+                    ]
+                }
+            ],
+            generationConfig: {
+                responseMimeType: 'application/json',
+                responseSchema: responseSchema,
+                temperature: 0.2 // 計算・引き写しタスクなので、温度は低くして決定論的にする
+            }
+        })
     });
 
-    // 親テーブルの生成データがある場合は、それをプロンプトに明示的に記載する
-    const relevantFks = table.columns.filter(c => c.isFk && c.reference?.tableId);
-    if (relevantFks.length > 0) {
-        prompt += AI_PROMPT_REFERENTIAL_INTEGRITY_HEADER;
+    if (!response.ok) {
+        const errText = await response.text();
+        console.error(`Gemini API Error for table ${table.name} (Derivations):`, errText);
+        throw new Error(`テーブル '${table.name}' の導出計算に失敗しました: ${response.status}`);
+    }
+
+    const json = await response.json();
+    
+    try {
+        const textResponse = json.candidates[0].content.parts[0].text;
+        const parsed = JSON.parse(textResponse);
         
-        relevantFks.forEach(c => {
-            const parentTableId = c.reference.tableId;
-            const parentColId = c.reference.columnId;
-            
-            if (parentData[parentTableId] && Array.isArray(parentData[parentTableId])) {
-                const parentRows = parentData[parentTableId];
-                // 親テーブルのデータ全体を示す（他の項目の意味的一貫性を保つため。例：注文データを作るために、ユーザーの名前や住所などを参考にできるようにする）
-                prompt += `- Parent Table ID '${parentTableId}' generated rows:\n`;
-                prompt += JSON.stringify(parentRows, null, 2) + '\n';
-                
-                const validKeys = parentRows.map(row => row[parentColId]).filter(value => value !== undefined && value !== null);
-                prompt += `  * VALID values for foreign key column '${c.id}' (referencing parent column '${parentColId}'): ${JSON.stringify(validKeys)}\n`;
-            }
-        });
-    }
-
-    // 直接の親テーブル以外の、これまでに生成されたすべての関連テーブル of データも意味的整合性（セマンティック整合性）のために提示する
-    const allGeneratedTableIds = Object.keys(parentData);
-    const indirectTableIds = allGeneratedTableIds.filter(id => !relevantFks.some(c => c.reference?.tableId === id));
-    if (indirectTableIds.length > 0) {
-        prompt += AI_PROMPT_SEMANTIC_CONSISTENCY_HEADER;
+        if (!parsed.rows || !Array.isArray(parsed.rows)) {
+            throw new Error("返却されたデータフォーマットが無効です。'rows'配列がありません。");
+        }
         
-        indirectTableIds.forEach(pId => {
-            if (parentData[pId] && Array.isArray(parentData[pId])) {
-                prompt += `- Table ID '${pId}' generated rows:\n`;
-                prompt += JSON.stringify(parentData[pId], null, 2) + '\n';
-            }
-        });
+        return parsed.rows;
+    } catch (e) {
+        console.error(`JSON parsing error for table ${table.name} (Derivations):`, e);
+        throw new Error(`テーブル '${table.name}' の導出計算レスポンスJSON解析に失敗しました。`);
     }
-
-    // 導出項目の計算に関するヒント
-    const dependentCols = table.columns.filter(c => c.attributeType === 'dependent');
-    if (dependentCols.length > 0) {
-        prompt += AI_PROMPT_DERIVED_COLUMNS_HEADER;
-        dependentCols.forEach(c => {
-            prompt += `- Column '${c.id}' is derived. Calculate its value based on the referenced parent row's attributes using formula: [${c.derivation}]. Ensure it perfectly matches the corresponding parent row value.\n`;
-        });
-    }
-
-    // 既存のモックデータが存在する場合は、それをプロンプトにインジェクションする
-    if (table.rows && table.rows.length > 0) {
-        prompt += AI_PROMPT_EXISTING_DATA_HEADER;
-        // IDや画面用のプロパティを省いて実データ値のみを渡すことで、AIの重複キー生成混乱を避ける
-        const existingData = table.rows.map(({ id, isMinimized, ...rest }) => rest);
-        prompt += JSON.stringify(existingData, null, 2) + '\n';
-    }
-
-    if (aiInstructions) {
-        prompt += AI_PROMPT_USER_INSTRUCTIONS_HEADER(aiInstructions, table.name, table.id);
-    }
-
-    const pkColumnId = table.columns.find(col => col.isPk)?.id || 'id';
-    prompt += AI_PROMPT_GENERATION_RULES(rowCount, pkColumnId);
-
-    return prompt;
 };
 
 /**
  * 単一のテーブルのデータをAIで生成するヘルパー関数
  */
-const generateSingleTableData = async (table, relationships, parentData, apiKey, rowCount, aiInstructions = '') => {
-    const prompt = buildSingleTablePrompt(table, relationships, parentData, rowCount, aiInstructions);
-    const responseSchema = buildSingleTableResponseSchema(table, parentData);
+const generateSingleTableData = async (table, relationships, parentData, apiKey, rowCount, aiInstructions = '', includeDependent = false) => {
+    const prompt = buildSingleTablePrompt(table, relationships, parentData, rowCount, aiInstructions, includeDependent);
+    const responseSchema = buildSingleTableResponseSchema(table, parentData, includeDependent);
 
     // REST API エンドポイント (Gemini 2.5 Flash モデルを使用)
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
@@ -316,22 +229,22 @@ export const generateMockDataWithAI = async (tables, relationships, apiKey, rowC
 
     const allGeneratedData = {};
 
-    // 2. レベル順に生成処理を進める（完全に直列実行し、各APIコールの間に適正なインターバルを置いて429を防ぐ）
+    // 2. 第1段階: レベル順に生成処理を進める（導出項目は除外して生成）
     for (let i = 0; i < levels.length; i++) {
         const levelTables = levels[i];
-        console.log(`[RDB Mock Data Generator] Level ${i} のテーブル生成を開始... (${levelTables.map(t => t.name).join(', ')})`);
+        console.log(`[RDB Mock Data Generator] 第1段階: Level ${i} のテーブル生成を開始... (${levelTables.map(t => t.name).join(', ')})`);
 
         for (let j = 0; j < levelTables.length; j++) {
             const table = levelTables[j];
             
-            // 同時アクセス集中を防ぐため、2回目以降のリクエスト送信前に 1500ms の確定インターバルを挟む
+            // 同時アクセス集中を防ぐため、2回目以降のリクエスト送信前に 3000ms の確定インターバルを挟む
             if (i > 0 || j > 0) {
-                console.log(`[RDB Mock Data Generator] レートリミット制限回避のため 1500ms 待機中...`);
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                console.log(`[RDB Mock Data Generator] レートリミット制限回避のため 3000ms 待機中...`);
+                await new Promise(resolve => setTimeout(resolve, 3000));
             }
 
             try {
-                const rows = await generateSingleTableData(table, relationships, allGeneratedData, apiKey, rowCount, aiInstructions);
+                const rows = await generateSingleTableData(table, relationships, allGeneratedData, apiKey, rowCount, aiInstructions, false);
                 allGeneratedData[table.id] = rows;
                 console.log(`[RDB Mock Data Generator] テーブル '${table.name}' の生成が完了しました（${rows.length}件）`);
             } catch (err) {
@@ -341,6 +254,140 @@ export const generateMockDataWithAI = async (tables, relationships, apiKey, rowC
         }
     }
 
+    // 1段階目で生成された各行に、導出項目の初期値（空文字列）を設定しておく
+    tables.forEach(table => {
+        const dependentCols = table.columns.filter(c => c.attributeType === 'dependent');
+        if (dependentCols.length > 0 && allGeneratedData[table.id]) {
+            allGeneratedData[table.id] = allGeneratedData[table.id].map(row => {
+                const updatedRow = { ...row };
+                dependentCols.forEach(col => {
+                    if (updatedRow[col.id] === undefined) {
+                        updatedRow[col.id] = "";
+                    }
+                });
+                return updatedRow;
+            });
+        }
+    });
+
+    // 3. 第2段階: トポロジカルソート逆順（子 → 親）で導出項目を算出
+    console.log("[RDB Mock Data Generator] 第1フェーズ完了。クールダウンのため 3000ms 待機します...");
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    console.log("[RDB Mock Data Generator] 第2段階: 導出項目の計算を開始します...");
+    const reverseLevels = levels.slice().reverse();
+    let derivationCallCount = 0;
+
+    for (let i = 0; i < reverseLevels.length; i++) {
+        const levelTables = reverseLevels[i];
+        for (let j = 0; j < levelTables.length; j++) {
+            const table = levelTables[j];
+            
+            // 導出項目が存在するかチェック
+            const hasDerivation = table.columns.some(c => c.attributeType === 'dependent');
+            if (!hasDerivation) continue;
+
+            console.log(`[RDB Mock Data Generator] テーブル '${table.name}' の導出計算を開始...`);
+
+            // 同時アクセス集中を防ぐため、2回目以降のリクエスト送信前に 3000ms の確定インターバルを挟む
+            if (derivationCallCount > 0) {
+                console.log(`[RDB Mock Data Generator] レートリミット制限回避のため 3000ms 待機中...`);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+
+            try {
+                let currentTableData = allGeneratedData[table.id] || [];
+
+                // orderBy 設定が定義されている場合は、JavaScript 側であらかじめソートする
+                if (table.orderBy && table.orderBy.type && currentTableData.length > 0) {
+                    let sortKeys = [];
+                    
+                    if (table.orderBy.keys && table.orderBy.keys.length > 0) {
+                        sortKeys = table.orderBy.keys;
+                    } else {
+                        // 互換性フォールバック（旧データ等で keys 配列がない場合）
+                        let sortColIds = [];
+                        if (table.orderBy.type === 'pk') {
+                            sortColIds = table.columns.filter(c => c.isPk).map(c => c.id);
+                        } else if (table.orderBy.type === 'uq' && table.orderBy.uqId) {
+                            const targetUq = table.uniqueKeys?.find(uq => uq.id === table.orderBy.uqId);
+                            sortColIds = targetUq ? (targetUq.columnIds || []) : [];
+                        }
+                        
+                        const defaultDir = table.orderBy.direction || 'ASC';
+                        sortKeys = sortColIds.map(cid => ({
+                            columnId: cid,
+                            direction: table.orderBy.directions?.[cid] || defaultDir
+                        }));
+                    }
+
+                    if (sortKeys.length > 0) {
+                        currentTableData = [...currentTableData].sort((a, b) => {
+                            for (const keyInfo of sortKeys) {
+                                const colId = keyInfo.columnId;
+                                const dir = keyInfo.direction || 'ASC';
+
+                                const valA = a[colId] !== undefined ? String(a[colId]) : '';
+                                const valB = b[colId] !== undefined ? String(b[colId]) : '';
+
+                                const numA = Number(valA);
+                                const numB = Number(valB);
+
+                                let diff = 0;
+                                if (!isNaN(numA) && !isNaN(numB) && valA !== '' && valB !== '') {
+                                    diff = dir === 'DESC' ? numB - numA : numA - numB;
+                                } else {
+                                    diff = dir === 'DESC' ? valB.localeCompare(valA) : valA.localeCompare(valB);
+                                }
+
+                                // 現在のカラムで差が出た場合はその比較結果を返す
+                                if (diff !== 0) return diff;
+                            }
+                            return 0;
+                        });
+                    }
+                }
+
+                if (currentTableData.length > 0) {
+                    const calculatedRows = await calculateSingleTableDerivations(table, currentTableData, allGeneratedData, apiKey, tables);
+                    
+                    // 主キー（ただし導出項目は除く）をベースに計算結果を元のデータにマージする
+                    const pkCols = table.columns.filter(col => col.isPk && col.attributeType !== 'dependent');
+                    
+                    allGeneratedData[table.id] = currentTableData.map((row, idx) => {
+                        let match = null;
+                        if (pkCols.length === 0) {
+                            // 主キーが定義されていないテーブルの場合はインデックスベースでマッチング
+                            match = calculatedRows[idx];
+                        } else {
+                            match = calculatedRows.find(r => {
+                                return pkCols.every(pkCol => {
+                                    return r[pkCol.id] !== undefined && row[pkCol.id] !== undefined && String(r[pkCol.id]) === String(row[pkCol.id]);
+                                });
+                            });
+                        }
+
+                        if (match) {
+                            const merged = { ...row };
+                            table.columns.forEach(col => {
+                                if (col.attributeType === 'dependent' && match[col.id] !== undefined) {
+                                    merged[col.id] = match[col.id];
+                                }
+                            });
+                            return merged;
+                        }
+                        return row;
+                    });
+                    
+                    console.log(`[RDB Mock Data Generator] テーブル '${table.name}' の導出計算が完了しました`);
+                    derivationCallCount++;
+                }
+            } catch (err) {
+                console.error(`[RDB Mock Data Generator] テーブル '${table.name}' の導出計算中にエラーが発生しました:`, err);
+                throw err;
+            }
+        }
+    }
+
     return allGeneratedData;
 };
-

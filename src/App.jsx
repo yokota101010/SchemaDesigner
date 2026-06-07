@@ -59,11 +59,12 @@ function SchemaDesigner() {
       tables, setTables, relationships, setRelationships,
       editingTableId, setEditingTableId, connectionMode, setConnectionMode,
       selectedRelId, setSelectedRelId, autoUpdateRelationshipType,
-      addTable, deleteTable, initiateDeleteTable, updateTableName,
+      addTable, deleteTable, initiateDeleteTable, updateTableName, updateTableOrderBy,
       toggleTableMinimize, addColumn, deleteColumn, updateColumn,
       updateColumnReference, addRow, deleteRow, updateRowValue,
       startConnectionMode, handleConnect, deleteRelationship,
-      addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol
+      addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol,
+      addUniqueKey, deleteUniqueKey, toggleUniqueKeyMapping
   } = schemaState;
 
   const [backupTables, setBackupTables] = useState(null);
@@ -393,11 +394,13 @@ function SchemaDesigner() {
       <TableEditorModal 
         editingTable={editingTable} tables={tables} 
         initiateDeleteTable={initiateDeleteTable} updateTableName={updateTableName} 
+        updateTableOrderBy={updateTableOrderBy}
         addColumn={addColumn} updateColumn={updateColumn} 
         deleteColumn={deleteColumn} 
         relationships={relationships} deleteRelationship={deleteRelationship}
         addFkRelationship={addFkRelationship} updateFkRelationshipParent={updateFkRelationshipParent}
         toggleFkMapping={toggleFkMapping} updateFkMappingParentCol={updateFkMappingParentCol}
+        addUniqueKey={addUniqueKey} deleteUniqueKey={deleteUniqueKey} toggleUniqueKeyMapping={toggleUniqueKeyMapping}
         onComplete={handleCompleteEdit}
         onCancel={handleCancelEdit}
       />

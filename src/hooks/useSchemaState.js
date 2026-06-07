@@ -99,6 +99,10 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
     setTables(tables.map(t => t.id === tableId ? { ...t, name } : t));
   };
 
+  const updateTableOrderBy = (tableId, orderBy) => {
+    setTables(tables.map(t => t.id === tableId ? { ...t, orderBy } : t));
+  };
+
   const toggleTableMinimize = (tableId) => {
     setTables(tables.map(t => t.id === tableId ? { ...t, isMinimized: !t.isMinimized } : t));
   };
@@ -127,10 +131,16 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
             delete newRow[colId];
             return newRow;
         });
+        const uqs = t.uniqueKeys || [];
+        const cleanedUqs = uqs.map(uq => ({
+          ...uq,
+          columnIds: uq.columnIds ? uq.columnIds.filter(id => id !== colId) : []
+        }));
         return {
           ...t,
           columns: t.columns.filter(c => c.id !== colId),
-          rows: newRows
+          rows: newRows,
+          uniqueKeys: cleanedUqs
         };
       }
       return t;
@@ -328,6 +338,62 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
     if (selectedRelId === relId) setSelectedRelId(null);
   };
 
+  const addUniqueKey = (tableId) => {
+    setTables(prevTables => prevTables.map(t => {
+      if (t.id === tableId) {
+        const uqs = t.uniqueKeys || [];
+        return {
+          ...t,
+          uniqueKeys: [
+            ...uqs,
+            { id: `uq_${Date.now()}`, columnIds: [] }
+          ]
+        };
+      }
+      return t;
+    }));
+  };
+
+  const deleteUniqueKey = (tableId, uqId) => {
+    setTables(prevTables => prevTables.map(t => {
+      if (t.id === tableId) {
+        const uqs = t.uniqueKeys || [];
+        return {
+          ...t,
+          uniqueKeys: uqs.filter(uq => uq.id !== uqId)
+        };
+      }
+      return t;
+    }));
+  };
+
+  const toggleUniqueKeyMapping = (tableId, uqId, colId, isChecked) => {
+    setTables(prevTables => prevTables.map(t => {
+      if (t.id === tableId) {
+        const uqs = t.uniqueKeys || [];
+        const updatedUqs = uqs.map(uq => {
+          if (uq.id === uqId) {
+            let colIds = uq.columnIds ? [...uq.columnIds] : [];
+            if (isChecked) {
+              if (!colIds.includes(colId)) {
+                colIds.push(colId);
+              }
+            } else {
+              colIds = colIds.filter(id => id !== colId);
+            }
+            return { ...uq, columnIds: colIds };
+          }
+          return uq;
+        });
+        return {
+          ...t,
+          uniqueKeys: updatedUqs
+        };
+      }
+      return t;
+    }));
+  };
+
   return {
     tables, setTables,
     relationships, setRelationships,
@@ -336,10 +402,11 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
     selectedRelId, setSelectedRelId,
     autoUpdateRelationshipType,
     addTable, deleteTable, initiateDeleteTable,
-    updateTableName, toggleTableMinimize,
+    updateTableName, updateTableOrderBy, toggleTableMinimize,
     addColumn, deleteColumn, updateColumn, updateColumnReference,
     addRow, deleteRow, updateRowValue,
     startConnectionMode, handleConnect, deleteRelationship,
-    addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol
+    addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol,
+    addUniqueKey, deleteUniqueKey, toggleUniqueKeyMapping
   };
 };

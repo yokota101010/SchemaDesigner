@@ -37,23 +37,34 @@ export const generateSQL = (tables, relationships) => {
     
     const colDefs = table.columns.map(col => {
       let def = `  ${col.name} ${col.type}`;
-      if (col.isUnique && !col.isPk) { 
-          def += ' UNIQUE';
-      }
       if (col.attributeType === 'dependent') {
           const derivation = col.derivation ? ` [${col.derivation}]` : '';
           def += ` /* Derived (導出項目)${derivation} */`;
       }
       return def;
     });
-    sql += colDefs.join(',\n');
 
     const pkCols = table.columns.filter(c => c.isPk);
     if (pkCols.length > 0) {
         const pkNames = pkCols.map(c => c.name).join(', ');
-        sql += `,\n  PRIMARY KEY (${pkNames})`;
+        colDefs.push(`  PRIMARY KEY (${pkNames})`);
     }
 
+    if (table.uniqueKeys && table.uniqueKeys.length > 0) {
+        table.uniqueKeys.forEach(uq => {
+            const cols = uq.columnIds?.map(id => {
+                const col = table.columns.find(c => c.id === id);
+                return col ? col.name : null;
+            }).filter(Boolean) || [];
+
+            if (cols.length > 0) {
+                const constraintName = `uq_${table.name}_` + cols.join('_');
+                colDefs.push(`  CONSTRAINT ${constraintName} UNIQUE (${cols.join(', ')})`);
+            }
+        });
+    }
+
+    sql += colDefs.join(',\n');
     sql += '\n);\n\n';
   });
 

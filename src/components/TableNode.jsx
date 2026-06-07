@@ -72,8 +72,9 @@ export const TableNode = ({
                                 const refTable = col.reference?.tableId ? tables.find(t => t.id === col.reference.tableId) : null;
                                 const refCol = refTable?.columns.find(c => c.id === col.reference?.columnId);
                                 const refLabel = refTable && refCol ? `${refTable.name}.${refCol.name}` : '';
+                                const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(col.id));
 
-                                if (col.isVisible === false && !col.isPk && !col.isUnique && !col.isFk) return null;
+                                if (col.isVisible === false && !col.isPk && !isColUnique && !col.isFk) return null;
 
                                 return (
                                     <th 
@@ -86,7 +87,7 @@ export const TableNode = ({
                                     >
                                         <div className="flex items-center gap-1.5">
                                             {col.isPk && <Key className="w-3 h-3 text-yellow-500 flex-shrink-0" />}
-                                            {col.isUnique && !col.isPk && <KeyRound className="w-3 h-3 text-purple-500 flex-shrink-0" />}
+                                            {isColUnique && !col.isPk && <KeyRound className="w-3 h-3 text-purple-500 flex-shrink-0" />}
                                             {col.isFk && <LinkIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />}
                                             {isDependent && <FunctionSquare className="w-3 h-3 text-orange-500 flex-shrink-0" />}
                                             <span>{col.name}</span>
@@ -104,7 +105,8 @@ export const TableNode = ({
                                 <tr key={row.id} className="group hover:bg-blue-50/30">
                                     <td className="px-2 py-1 border-b border-gray-100 text-center text-gray-300 select-none">{idx + 1}</td>
                                     {table.columns.map(col => {
-                                        if (col.isVisible === false && !col.isPk && !col.isUnique && !col.isFk) return null;
+                                        const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(col.id));
+                                        if (col.isVisible === false && !col.isPk && !isColUnique && !col.isFk) return null;
                                         return (
                                         <td key={col.id} className={`p-0 border-b border-gray-100 border-l border-gray-50 ${col.attributeType === 'dependent' ? 'bg-orange-50/10' : ''}`}>
                                             <input 

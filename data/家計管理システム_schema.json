@@ -1,0 +1,423 @@
+{
+  "name": "家計管理システム",
+  "tables": [
+    {
+      "id": "table_1780214186481",
+      "name": "費目",
+      "x": 240,
+      "y": 76.5,
+      "isMinimized": false,
+      "columns": [
+        {
+          "id": "col_1780214186481",
+          "name": "費目C",
+          "type": "INT",
+          "isPk": true,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true,
+          "description": ""
+        },
+        {
+          "id": "col_1780214237001",
+          "name": "費目名",
+          "type": "VARCHAR(255)",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214258748",
+          "name": "収支区分",
+          "type": "VARCHAR(255)",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true,
+          "description": "'収入’、’支出'の何れか。"
+        }
+      ],
+      "rows": [],
+      "orderBy": {
+        "type": "pk",
+        "uqId": "",
+        "direction": "ASC",
+        "keys": [
+          {
+            "columnId": "col_1780214186481",
+            "direction": "ASC"
+          }
+        ]
+      }
+    },
+    {
+      "id": "table_1780214349756",
+      "name": "月次収支取引サマリ",
+      "x": 399,
+      "y": 288.5,
+      "isMinimized": false,
+      "columns": [
+        {
+          "id": "col_1780214349756",
+          "name": "費目C",
+          "type": "INT",
+          "isPk": true,
+          "isUnique": false,
+          "isFk": true,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true,
+          "reference": {
+            "tableId": "table_1780214186481",
+            "columnId": "col_1780214186481"
+          }
+        },
+        {
+          "id": "col_1780214406754",
+          "name": "年月",
+          "type": "DATE",
+          "isPk": true,
+          "isUnique": false,
+          "isFk": true,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true,
+          "reference": {
+            "tableId": "table_1780744591850",
+            "columnId": "col_1780744591850"
+          }
+        },
+        {
+          "id": "col_1780214437092",
+          "name": "実績額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "dependent",
+          "derivation": "費目Cと年月に紐付く収支取引明細の取引額を合算したもの。",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780744030960",
+          "name": "予算額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        }
+      ],
+      "rows": [],
+      "orderBy": {
+        "type": "pk",
+        "uqId": "",
+        "direction": "ASC",
+        "keys": [
+          {
+            "columnId": "col_1780214406754",
+            "direction": "ASC"
+          },
+          {
+            "columnId": "col_1780214349756",
+            "direction": "ASC"
+          }
+        ]
+      }
+    },
+    {
+      "id": "table_1780214495778",
+      "name": "収支取引明細",
+      "x": 467,
+      "y": 505.5,
+      "isMinimized": false,
+      "columns": [
+        {
+          "id": "col_1780214495778",
+          "name": "取引No",
+          "type": "INT",
+          "isPk": true,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214523854",
+          "name": "取引時刻",
+          "type": "TIMESTAMP",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214537089",
+          "name": "費目C",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": true,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true,
+          "reference": {
+            "tableId": "table_1780214349756",
+            "columnId": "col_1780214349756"
+          }
+        },
+        {
+          "id": "col_1780214557822",
+          "name": "取引額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780214571954",
+          "name": "摘要",
+          "type": "VARCHAR(255)",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true,
+          "description": "紐づく「費目」テーブルの「費目名」と意味的に完全に調和する、具体的かつ自然な日本語の取引内容（摘要）を入力してください。"
+        },
+        {
+          "id": "col_1780214586990",
+          "name": "年月",
+          "type": "VARCHAR(255)",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": true,
+          "attributeType": "dependent",
+          "derivation": "取引時刻の年月部分",
+          "isVisible": true,
+          "reference": {
+            "tableId": "table_1780214349756",
+            "columnId": "col_1780214406754"
+          }
+        },
+        {
+          "id": "col_1780744638297",
+          "name": "現預金残高",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "dependent",
+          "derivation": "月次取引サマリの月初現預金残高に対して、該当レコードの先行レコードの収入および支出を加減算して算出",
+          "isVisible": true
+        }
+      ],
+      "rows": [],
+      "orderBy": {
+        "type": "uq",
+        "uqId": "uq_1780844295111",
+        "direction": "ASC",
+        "keys": [
+          {
+            "columnId": "col_1780214523854",
+            "direction": "ASC"
+          }
+        ]
+      },
+      "uniqueKeys": [
+        {
+          "id": "uq_1780844295111",
+          "columnIds": [
+            "col_1780214523854"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "table_1780744591850",
+      "name": "月次取引サマリ",
+      "x": 246,
+      "y": 769.5,
+      "isMinimized": false,
+      "columns": [
+        {
+          "id": "col_1780744591850",
+          "name": "年月",
+          "type": "DATE",
+          "isPk": true,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "independent",
+          "derivation": "",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780744746447",
+          "name": "月初現預金残高",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "dependent",
+          "derivation": "月次取引サマリの前月の月末現預金残高。前月の締め処理を行った際に設定される。",
+          "isVisible": true,
+          "description": ""
+        },
+        {
+          "id": "col_1780744768387",
+          "name": "月間収入実績合計額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "dependent",
+          "derivation": "Σ今月の収入系費目の月次収支サマリ.実績額",
+          "isVisible": true,
+          "description": ""
+        },
+        {
+          "id": "col_1780744797551",
+          "name": "月間支出実績合計額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "dependent",
+          "derivation": "Σ今月の支出系費目の月次収支サマリ.実績額",
+          "isVisible": true,
+          "description": ""
+        },
+        {
+          "id": "col_1780744813897",
+          "name": "月末現預金残高",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "dependent",
+          "derivation": "月初現預金残高+月間収入実績合計額-月間支出実績合計額",
+          "isVisible": true,
+          "description": ""
+        },
+        {
+          "id": "col_1780744836101",
+          "name": "月間収入予算合計額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "dependent",
+          "derivation": "Σ今月の収入系費目の月次収支サマリ.予算額",
+          "isVisible": true
+        },
+        {
+          "id": "col_1780744847394",
+          "name": "月間支出予算合計額",
+          "type": "INT",
+          "isPk": false,
+          "isUnique": false,
+          "isFk": false,
+          "attributeType": "dependent",
+          "derivation": "Σ今月の支出系費目の月次収支サマリ.予算額",
+          "isVisible": true
+        }
+      ],
+      "rows": [],
+      "uniqueKeys": [],
+      "orderBy": {
+        "type": "pk",
+        "uqId": "",
+        "direction": "ASC",
+        "keys": [
+          {
+            "columnId": "col_1780744591850",
+            "direction": "ASC"
+          }
+        ]
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel_1780214471946",
+      "from": "table_1780214186481",
+      "to": "table_1780214349756",
+      "type": "identifying",
+      "mappings": [
+        {
+          "parentColId": "col_1780214186481",
+          "childColId": "col_1780214349756"
+        }
+      ]
+    },
+    {
+      "id": "rel_1780745404314",
+      "from": "table_1780744591850",
+      "to": "table_1780214349756",
+      "type": "identifying",
+      "mappings": [
+        {
+          "parentColId": "col_1780744591850",
+          "childColId": "col_1780214406754"
+        }
+      ]
+    },
+    {
+      "id": "rel_1780214624209",
+      "from": "table_1780214349756",
+      "to": "table_1780214495778",
+      "type": "non_identifying",
+      "mappings": [
+        {
+          "parentColId": "col_1780214349756",
+          "childColId": "col_1780214537089"
+        },
+        {
+          "parentColId": "col_1780214406754",
+          "childColId": "col_1780214586990"
+        }
+      ]
+    }
+  ],
+  "crudFunctions": [
+    {
+      "id": "func_1780234744517",
+      "name": "収支取引登録"
+    }
+  ],
+  "crudData": {
+    "func_1780234744517": {
+      "table_1780214186481": [
+        "R"
+      ],
+      "table_1780214349756": [
+        "U"
+      ],
+      "table_1780214495778": [
+        "C",
+        "R",
+        "U",
+        "D"
+      ]
+    }
+  },
+  "aiInstructions": "",
+  "version": "1.3",
+  "exportedAt": "2026-06-07T15:08:50.714Z"
+}
