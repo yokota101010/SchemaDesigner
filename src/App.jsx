@@ -119,7 +119,14 @@ function SchemaDesigner() {
         if (data) {
             const parsed = JSON.parse(data);
             setProjectName(parsed.name || DEFAULT_PROJECT_NAME);
-            setTables(parsed.tables || []);
+            
+            // 各テーブルの rows が確実に配列であることを保証する
+            const cleanedTables = (parsed.tables || []).map(t => ({
+                ...t,
+                rows: Array.isArray(t.rows) ? t.rows : []
+            }));
+            setTables(cleanedTables);
+            
             setRelationships(parsed.relationships || []);
             setCrudFunctions(parsed.crudFunctions || []);
             setCrudData(parsed.crudData || {});
@@ -137,9 +144,16 @@ function SchemaDesigner() {
 
   useEffect(() => {
       if (isLoading) return;
+      
+      // 保存時に rows 配列を保証する
+      const cleanedTables = tables.map(t => ({
+        ...t,
+        rows: Array.isArray(t.rows) ? t.rows : []
+      }));
+
       const saveData = {
         name: projectName,
-        tables,
+        tables: cleanedTables,
         relationships,
         crudFunctions,
         crudData,
@@ -219,9 +233,15 @@ function SchemaDesigner() {
   const handleExportJSON = async () => {
     const defaultName = `${projectName.replace(/\s+/g, '_')}_schema.json`;
 
+    // エクスポート時に rows 配列を保証する
+    const cleanedTables = tables.map(t => ({
+      ...t,
+      rows: Array.isArray(t.rows) ? t.rows : []
+    }));
+
     const projectData = {
       name: projectName,
-      tables,
+      tables: cleanedTables,
       relationships,
       crudFunctions,
       crudData,
@@ -291,7 +311,14 @@ function SchemaDesigner() {
             `ファイル "${file.name}" を読み込みますか？\n現在の作業内容は上書きされます。`,
             () => {
                 setProjectName(json.name || "Imported Project");
-                setTables(json.tables);
+                
+                // 読込時に rows 配列を保証し、古い形式のファイルでもクラッシュしないようにする
+                const cleanedTables = (json.tables || []).map(t => ({
+                    ...t,
+                    rows: Array.isArray(t.rows) ? t.rows : []
+                }));
+                setTables(cleanedTables);
+
                 // Assume loaded relationships are correct, no need to auto-sync which might overwrite loaded types
                 setRelationships(json.relationships);
                 setCrudFunctions(json.crudFunctions || []);

@@ -7,8 +7,8 @@ import { buildSingleTablePrompt, buildSingleTableDerivationPrompt } from './aiPr
 /**
  * レートリミット（429）やサーバー一時エラーに対応するための指数バックオフ付き自動リトライfetch
  */
-const fetchWithRetry = async (url, options, maxRetries = 5) => {
-    let delay = 5000; // 無料枠の1分間制限をクリアするため、初期待機時間は強気の5秒
+const fetchWithRetry = async (url, options, maxRetries = 7) => {
+    let delay = 10000; // 無料枠の1分間制限をクリアするため、初期待機時間は強気の10秒
     for (let i = 0; i < maxRetries; i++) {
         try {
             const response = await fetch(url, options);
@@ -237,10 +237,10 @@ export const generateMockDataWithAI = async (tables, relationships, apiKey, rowC
         for (let j = 0; j < levelTables.length; j++) {
             const table = levelTables[j];
             
-            // 同時アクセス集中を防ぐため、2回目以降のリクエスト送信前に 3000ms の確定インターバルを挟む
+            // 同時アクセス集中を防ぐため、2回目以降のリクエスト送信前に 5000ms の確定インターバルを挟む
             if (i > 0 || j > 0) {
-                console.log(`[RDB Mock Data Generator] レートリミット制限回避のため 3000ms 待機中...`);
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                console.log(`[RDB Mock Data Generator] レートリミット制限回避のため 5000ms 待機中...`);
+                await new Promise(resolve => setTimeout(resolve, 5000));
             }
 
             try {
@@ -271,8 +271,8 @@ export const generateMockDataWithAI = async (tables, relationships, apiKey, rowC
     });
 
     // 3. 第2段階: トポロジカルソート逆順（子 → 親）で導出項目を算出
-    console.log("[RDB Mock Data Generator] 第1フェーズ完了。クールダウンのため 3000ms 待機します...");
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    console.log("[RDB Mock Data Generator] 第1フェーズ完了。クールダウンのため 5000ms 待機します...");
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     console.log("[RDB Mock Data Generator] 第2段階: 導出項目の計算を開始します...");
     const reverseLevels = levels.slice().reverse();
@@ -289,10 +289,10 @@ export const generateMockDataWithAI = async (tables, relationships, apiKey, rowC
 
             console.log(`[RDB Mock Data Generator] テーブル '${table.name}' の導出計算を開始...`);
 
-            // 同時アクセス集中を防ぐため、2回目以降のリクエスト送信前に 3000ms の確定インターバルを挟む
+            // 同時アクセス集中を防ぐため、2回目以降のリクエスト送信前に 5000ms の確定インターバルを挟む
             if (derivationCallCount > 0) {
-                console.log(`[RDB Mock Data Generator] レートリミット制限回避のため 3000ms 待機中...`);
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                console.log(`[RDB Mock Data Generator] レートリミット制限回避のため 5000ms 待機中...`);
+                await new Promise(resolve => setTimeout(resolve, 5000));
             }
 
             try {
