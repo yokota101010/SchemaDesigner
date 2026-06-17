@@ -177,6 +177,29 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
     }));
   };
 
+  const moveColumn = useCallback((tableId, colId, direction) => {
+    setTables(prevTables => prevTables.map(t => {
+      if (t.id === tableId) {
+        const index = t.columns.findIndex(c => c.id === colId);
+        if (index === -1) return t;
+        
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= t.columns.length) return t;
+        
+        const newColumns = [...t.columns];
+        const temp = newColumns[index];
+        newColumns[index] = newColumns[targetIndex];
+        newColumns[targetIndex] = temp;
+        
+        return {
+          ...t,
+          columns: newColumns
+        };
+      }
+      return t;
+    }));
+  }, [setTables]);
+
   const updateColumnReference = (tableId, colId, key, value) => {
       setTables(tables.map(t => {
           if (t.id === tableId) {
@@ -404,6 +427,7 @@ export const useSchemaState = (viewOffset, requestConfirmation) => {
     addTable, deleteTable, initiateDeleteTable,
     updateTableName, updateTableOrderBy, toggleTableMinimize,
     addColumn, deleteColumn, updateColumn, updateColumnReference,
+    moveColumn,
     addRow, deleteRow, updateRowValue,
     startConnectionMode, handleConnect, deleteRelationship,
     addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol,

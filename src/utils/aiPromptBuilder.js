@@ -8,17 +8,17 @@ import {
     AI_PROMPT_GENERATION_RULES,
     AI_PROMPT_DERIVATION_ROLE,
     AI_PROMPT_DERIVATION_RULES
-} from '../../skills/rdb-mock-data-generator/aiPromptTemplates.js';
+} from './aiPromptTemplates.js';
 
 /**
  * 単一テーブル用のデータ生成用プロンプトを構築する
  */
-export const buildSingleTablePrompt = (table, relationships, parentData = {}, rowCount = 3, aiInstructions = '', includeDependent = false) => {
+export const buildSingleTablePrompt = (table, relationships, parentData = {}, rowCount = 3, otherInstructions = '', includeDependent = false) => {
     let prompt = AI_PROMPT_SYSTEM_ROLE(table.name, table.id) + `\n\n### Table Columns:\n`;
 
     table.columns.forEach(c => {
-        // 第1段階では導出項目を無視する
-        if (!includeDependent && c.attributeType === 'dependent') return;
+        // 第1段階では導出項目を無視する。ただし、第一段階解決可能項目は含める
+        if (!includeDependent && c.attributeType === 'dependent' && !c.isFirstPhaseCalculable) return;
 
         const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(c.id));
         prompt += `- Column ID: '${c.id}', Physics Name: '${c.name}', Data Type: '${c.type}', PK: ${c.isPk}, UQ: ${isColUnique}, FK: ${c.isFk}`;
@@ -64,8 +64,11 @@ export const buildSingleTablePrompt = (table, relationships, parentData = {}, ro
     }
 
     // 導出項目の計算に関するヒント
-    const dependentCols = table.columns.filter(c => c.attributeType === 'dependent');
-    if (includeDependent && dependentCols.length > 0) {
+    const dependentCols = table.columns.filter(c => {
+        if (includeDependent) return c.attributeType === 'dependent';
+        return c.attributeType === 'dependent' && c.isFirstPhaseCalculable;
+    });
+    if (dependentCols.length > 0) {
         prompt += AI_PROMPT_DERIVED_COLUMNS_HEADER;
         dependentCols.forEach(c => {
             prompt += `- Column '${c.id}' is derived. Calculate its value based on the referenced parent row's attributes using formula: [${c.derivation}]. Ensure it perfectly matches the corresponding parent row value.\n`;
@@ -78,6 +81,9 @@ export const buildSingleTablePrompt = (table, relationships, parentData = {}, ro
         // IDや画面用のプロパティを省いて実データ値のみを渡すことで、AIの重複キー生成混乱を避ける
         const existingData = table.rows.map(({ id, isMinimized, ...rest }) => rest);
         prompt += JSON.stringify(existingData, null, 2) + '\n';
+        prompt += `\n* CRITICAL INSTRUCTION FOR EXISTING DATA (INITIAL RECORDS):\n`;
+        prompt += `- The existing rows listed above represent FIXED INITIAL/STARTING data. You MUST PRESERVE all these existing rows exactly as they are. Do NOT modify their values, and do NOT delete them.\n`;
+        prompt += `- Your job is to generate ADDITIONAL rows (like transaction items for subsequent dates, or other business records) that align with and build upon these initial records, complying with the user instructions.\n`;
     }
 
     // ユニークキー制約の明示
@@ -98,8 +104,8 @@ export const buildSingleTablePrompt = (table, relationships, parentData = {}, ro
         }
     }
 
-    if (aiInstructions) {
-        prompt += AI_PROMPT_USER_INSTRUCTIONS_HEADER(aiInstructions, table.name, table.id);
+    if (otherInstructions) {
+        prompt += AI_PROMPT_USER_INSTRUCTIONS_HEADER(otherInstructions, table.name, table.id);
     }
 
     const pkColumnId = table.columns.find(col => col.isPk)?.id || 'id';
@@ -111,7 +117,7 @@ export const buildSingleTablePrompt = (table, relationships, parentData = {}, ro
 /**
  * 第2段階用のプロンプトを構築する (導出項目の計算)
  */
-export const buildSingleTableDerivationPrompt = (table, currentTableData, allGeneratedData, tables) => {
+export const buildSingleTableDerivationPrompt = (table, currentTableData, allGeneratedData, tables, otherInstructions = '') => {
     let prompt = AI_PROMPT_DERIVATION_ROLE(table.name);
     
     prompt += `### Target Table '${table.name}' Columns:\n`;
@@ -173,8 +179,48 @@ export const buildSingleTableDerivationPrompt = (table, currentTableData, allGen
             prompt += `* **Pre-sorted Sequence**: The rows in 'Current Data for Target Table' above are already sorted in the following order: ${sortDescriptions.join(', ')}. You must process the rows and carry over the calculations sequentially from top to bottom based on this order.\n\n`;
         }
     }
+
+    if (otherInstructions) {
+        prompt += `### User Rules & Requirements (IMPORTANT for matching calculations):\n`;
+        prompt += `* Instructions: "${otherInstructions}"\n`;
+        prompt += `* Make sure any calculated values (like dynamic totals, counts, or carry-overs) comply with these rules (e.g., if there are specific count limits or monthly limits, ensure calculations match the actual generated transaction count).\n\n`;
+    }
     
     prompt += AI_PROMPT_DERIVATION_RULES;
+    
+    return prompt;
+};
+
+/**
+ * 初期値設定用のプロンプトを構築する
+ */
+export const buildInitialValueParsingPrompt = (tables, initialInstructions) => {
+    let prompt = `You are an expert database administrator.\n`;
+    prompt += `Your task is to analyze the user's natural language instruction for setting up INITIAL values (like starting balances, categories, initial master values, etc.) and map them onto the appropriate table columns.\n\n`;
+    
+    prompt += `### Database Schema Definition:\n`;
+    tables.forEach(table => {
+        prompt += `- Table Name: '${table.name}' (ID: '${table.id}')\n`;
+        prompt += `  * Columns:\n`;
+        table.columns.forEach(col => {
+            prompt += `    - Column ID: '${col.id}', Physics Name: '${col.name}', Type: '${col.type}', PK: ${col.isPk}, FK: ${col.isFk}`;
+            if (col.description) {
+                prompt += `, Description: "${col.description}"`;
+            }
+            prompt += `\n`;
+        });
+        prompt += `\n`;
+    });
+    
+    prompt += `### User Initial Value Instructions:\n`;
+    prompt += `"${initialInstructions}"\n\n`;
+    
+    prompt += `### Output Rules:\n`;
+    prompt += `1. Parse the user's request, identify which tables and columns should contain the initial/starting records.\n`;
+    prompt += `2. Formulate the initial rows. Use ONLY the table IDs as keys for the outer object, and column IDs as keys for each row object.\n`;
+    prompt += `3. Set appropriate values matching the data types (e.g., numbers for INT, proper ISO dates YYYY-MM-DD for DATE, etc.).\n`;
+    prompt += `4. Ensure referential integrity if the user sets values across multiple related tables (e.g., the FK column in table B must match the PK column in table A).\n`;
+    prompt += `5. If the instructions do not apply to a specific table, do not generate any rows for that table ID (leave it as an empty array or omit it).\n`;
     
     return prompt;
 };

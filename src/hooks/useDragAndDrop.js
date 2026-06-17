@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { getTableRect, generateOrthogonalPath } from '../utils/layoutUtils';
+import { calculateRelationshipPath } from '../utils/layoutUtils';
 
 export const useDragAndDrop = (tables, setTables, relationships, viewOffset, setViewOffset) => {
   const [draggingId, setDraggingId] = useState(null);
@@ -67,50 +67,18 @@ export const useDragAndDrop = (tables, setTables, relationships, viewOffset, set
             // Update relationship paths directly in DOM
             relationships.forEach(rel => {
                 if (rel.from === draggingId || rel.to === draggingId) {
-                    const fromTable = tables.find(t => t.id === rel.from);
-                    const toTable = tables.find(t => t.id === rel.to);
-                    if (!fromTable || !toTable) return;
+                    const pathInfo = calculateRelationshipPath(
+                        rel, tables, relationships, viewOffset, 
+                        draggingId, { x: newX, y: newY }
+                    );
+                    if (!pathInfo) return;
 
-                    const getRect = (table) => {
-                        const dragPos = table.id === draggingId ? { x: newX, y: newY } : null;
-                        return getTableRect(table, viewOffset, dragPos);
-                    };
-
-                    const fromRect = getRect(fromTable);
-                    const toRect = getRect(toTable);
-                    const isChildBelow = toRect.y > fromRect.y;
-
-                    const incomingRels = relationships.filter(r => r.to === rel.to);
-                    const sortedIncomingRels = incomingRels.sort((a, b) => {
-                        const tableA = tables.find(t => t.id === a.from);
-                        const tableB = tables.find(t => t.id === b.from);
-                        const ya = tableA?.id === draggingId ? newY : (tableA?.y || 0);
-                        const yb = tableB?.id === draggingId ? newY : (tableB?.y || 0);
-                        return ya - yb;
-                    });
-                    
-                    const index = sortedIncomingRels.findIndex(r => r.id === rel.id);
-                    const total = incomingRels.length;
-                    
-                    const gap = 15;
-                    const yOffset = (index - (total - 1) / 2) * gap;
-
-                    const startX = fromRect.x + 24; 
-                    // テーブルの境界から 8px 離れた位置を、関連線（および横棒マーカー）の出発点にします
-                    const startY = isChildBelow ? (fromRect.y + fromRect.height + 8) : (fromRect.y - 8);
-                    const endX = toRect.x;
-                    const endY = toRect.y + toRect.height / 2 + yOffset;
-
-                    // 共通ユーティリティを使用して直角角丸パスデータを生成
-                    const pathData = generateOrthogonalPath(startX, startY, endX, endY, isChildBelow);
-                    
                     const gEl = document.getElementById(`rel-${rel.id}`);
                     if (gEl) {
                         const paths = gEl.querySelectorAll('path');
-                        const isIdentifying = rel.type === 'identifying';
-                        const dash = isIdentifying ? "none" : "5,5";
+                        const dash = pathInfo.isIdentifying ? "none" : "5,5";
                         paths.forEach(p => {
-                            p.setAttribute('d', pathData);
+                            p.setAttribute('d', pathInfo.pathData);
                             p.setAttribute('stroke-dasharray', dash);
                         });
                     }

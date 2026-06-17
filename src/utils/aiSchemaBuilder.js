@@ -6,8 +6,8 @@ export const buildSingleTableResponseSchema = (table, parentData = {}, includeDe
     const tableUqs = table.uniqueKeys || [];
     
     table.columns.forEach(col => {
-        // 第1段階では導出項目（dependent）を除外する
-        if (!includeDependent && col.attributeType === 'dependent') return;
+        // 第1段階では導出項目（dependent）を除外する。ただし、第一段階解決可能項目は含める
+        if (!includeDependent && col.attributeType === 'dependent' && !col.isFirstPhaseCalculable) return;
 
         let desc = `Value for column '${col.name}' (${col.type})`;
         if (col.description) desc += ` [Business Rule/Instruction: ${col.description}]`;
@@ -39,7 +39,7 @@ export const buildSingleTableResponseSchema = (table, parentData = {}, includeDe
     // 必須項目の抽出
     const requiredCols = table.columns
         .filter(col => {
-            if (!includeDependent && col.attributeType === 'dependent') return false;
+            if (!includeDependent && col.attributeType === 'dependent' && !col.isFirstPhaseCalculable) return false;
             return col.isPk || col.isFk || col.attributeType === 'dependent';
         })
         .map(col => col.id);
@@ -102,5 +102,44 @@ export const buildSingleTableDerivationSchema = (table, allGeneratedData = {}) =
             }
         },
         required: ['rows']
+    };
+};
+
+/**
+ * 初期値解析結果を受け取るための動的 JSON Schema を構築する
+ */
+export const buildInitialValueParsingSchema = (tables) => {
+    const tableProps = {};
+    
+    tables.forEach(table => {
+        const columnProps = {};
+        
+        table.columns.forEach(col => {
+            columnProps[col.id] = {
+                type: 'string',
+                description: `Value for column '${col.name}' (${col.type}). PK: ${col.isPk}, FK: ${col.isFk}`
+            };
+        });
+        
+        tableProps[table.id] = {
+            type: 'array',
+            description: `List of initial rows for table '${table.name}'. Generate rows only if initial instructions define values for this table. Otherwise, return empty array.`,
+            items: {
+                type: 'object',
+                properties: columnProps
+            }
+        };
+    });
+    
+    return {
+        type: 'object',
+        properties: {
+            tables: {
+                type: 'object',
+                properties: tableProps,
+                description: 'Object mapping table IDs to their list of initial rows.'
+            }
+        },
+        required: ['tables']
     };
 };

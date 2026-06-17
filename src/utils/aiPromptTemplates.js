@@ -61,7 +61,12 @@ export const AI_PROMPT_USER_INSTRUCTIONS_HEADER = (aiInstructions, tableName, ta
  */
 export const AI_PROMPT_GENERATION_RULES = (rowCount, pkColumnId) => `
 ### Rules for Data Generation:
-1. **Diverse & Real Data**: Generate realistic mock data in Japanese (aim for approximately ${rowCount} rows, but you can increase or decrease this count dynamically to fulfill the user's specific refinement requests, such as adding or deleting items).
+1. **Diverse & Real Data**: Generate realistic mock data in Japanese.
+   - Aim for approximately ${rowCount} rows by default.
+   - **[Bidirectional Row Count Deduction]**:
+     - If the user's custom instructions specify table-specific row counts or patterns, you MUST prioritize those instructions.
+     - When generating parent/master tables, you MUST logically compute and deduce the required number of rows needed to support the child/related table constraints described in the instructions.
+     - Conversely, when generating child/related tables, you MUST examine the generated parent datasets (e.g., distinct parent primary keys, master codes, or categories) and logically deduce the required child rows. Ensure that the generated child records are distributed reasonably and realistically across all available parent keys (e.g., if there are multiple active master/parent key values, generate child rows spread across them to ensure realistic data coverage, rather than clustering all child records under a single parent key).
 2. **Referential Integrity & Dynamic Synchronization (CRITICAL)**: 
    - Your foreign key columns MUST exactly reference valid existing primary key values from the parent tables provided above.
    - Do NOT use any IDs that are not present in the parent data list.
@@ -92,5 +97,5 @@ export const AI_PROMPT_DERIVATION_RULES = `
 3. **Match column IDs with Physics Names**: Use 'Columns Map' provided for both target and related tables to translate formulas (written in Physics Names, e.g., 'SUM(収支取引明細.取引額)') into column ID matches (e.g., summing column '取引額' from the rows of '収支取引明細' where the category code '費目C' matches the current row's category code).
 4. **Handle empty matches**: If no matching records exist in the related tables for a given row's keys, compute the value as '0' or an appropriate empty value, rather than copying a value from another row.
 5. **Schema and row integrity**: You MUST return the EXACT same number of rows (with the same 'id' and other existing column values). Do NOT add, delete, or reorder any rows. Only populate the derived/dependent columns.
-6. **Handle sequential carry-over (accumulation)**: If a derived column formula references a previous period, previous row, or cumulative value (e.g., '前月の...', '前行の...', '繰越金', '累積'), evaluate the rows sequentially in the exact order they are presented. The input rows have been pre-sorted by the specified logical order to ensure correctness. Carry over the calculated values sequentially from top to bottom.
+6. **Handle sequential carry-over (accumulation)**: If a derived column formula references a previous period, previous row, or cumulative value (e.g., '前月の...', '前行 of...', '繰越金', '累積'), evaluate the rows sequentially in the exact order they are presented. The input rows have been pre-sorted by the specified logical order to ensure correctness. Carry over the calculated values sequentially from top to bottom.
 `;

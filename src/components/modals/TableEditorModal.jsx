@@ -1,17 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, X, Plus, Key, KeyRound, Eye, EyeOff, Trash2, LinkIcon } from '../Icons';
 import { DATA_TYPES, ATTRIBUTE_TYPES } from '../../constants';
 
 export const TableEditorModal = ({
     editingTable, tables,
     initiateDeleteTable, updateTableName, updateTableOrderBy, addColumn, updateColumn,
-    deleteColumn,
+    deleteColumn, moveColumn,
     relationships, deleteRelationship,
     addFkRelationship, updateFkRelationshipParent,
     toggleFkMapping, updateFkMappingParentCol,
     addUniqueKey, deleteUniqueKey, toggleUniqueKeyMapping,
     onComplete, onCancel
 }) => {
+    const [detailEditConfig, setDetailEditConfig] = useState(null);
+    const [tempDetailValue, setTempDetailValue] = useState('');
+
+    useEffect(() => {
+        if (detailEditConfig) {
+            setTempDetailValue(detailEditConfig.value);
+        } else {
+            setTempDetailValue('');
+        }
+    }, [detailEditConfig]);
+
+    const handleSaveDetail = () => {
+        if (detailEditConfig) {
+            updateColumn(editingTable.id, detailEditConfig.columnId, detailEditConfig.field, tempDetailValue);
+            setDetailEditConfig(null);
+        }
+    };
+
     if (!editingTable) return null;
 
     // 自テーブルが「子テーブル（to）」となる外部キー制約（リレーション）を抽出
@@ -23,8 +41,8 @@ export const TableEditorModal = ({
     // カラムの中に「導出項目」が1つでも存在するか判定
     const hasDependentColumn = editingTable.columns.some(c => c.attributeType === 'dependent');
 
-    // 動的にテーブルの最小幅を計算 (基本列幅[導出あり960px / なし780px] ＋ 1列のFKごとに192px追加 ＋ 1列のUQごとに96px追加)
-    const baseWidth = hasDependentColumn ? 960 : 780;
+    // 動的にテーブルの最小幅を計算 (基本列幅[導出あり1020px / なし840px] ＋ 1列のFKごとに192px追加 ＋ 1列のUQごとに96px追加)
+    const baseWidth = hasDependentColumn ? 1020 : 840;
     const tableMinWidth = baseWidth + (tableRels.length * 192) + (tableUqs.length * 96);
 
     // ソートキー候補リスト（PK / UK 制約グループ）を作成
@@ -302,6 +320,7 @@ export const TableEditorModal = ({
                             >
                                 <thead className="bg-gray-100 text-gray-600 font-semibold sticky top-0 z-10">
                                     <tr>
+                                        <th className="px-3 py-2 text-center" style={{ width: '60px', minWidth: '60px' }}>順序</th>
                                         <th className="px-3 py-2 text-center" style={{ width: '45px', minWidth: '45px' }}>PK</th>
                                         <th className="px-3 py-2" style={{ width: '180px', minWidth: '180px' }}>カラム名</th>
                                         <th className="px-3 py-2" style={{ width: '130px', minWidth: '130px' }}>データ型</th>
@@ -370,13 +389,39 @@ export const TableEditorModal = ({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 bg-white">
-                                    {editingTable.columns.map(col => {
+                                    {editingTable.columns.map((col, colIdx) => {
                                         const isColUnique = tableUqs.some(uq => uq.columnIds?.includes(col.id));
                                         const isMandatory = col.isPk || isColUnique || col.isFk;
                                         const isVisible = col.isVisible !== false;
+                                        const isFirst = colIdx === 0;
+                                        const isLast = colIdx === editingTable.columns.length - 1;
 
                                         return (
                                             <tr key={col.id} className="hover:bg-gray-50 group">
+                                                {/* 順序 */}
+                                                <td className="px-3 py-1.5 text-center">
+                                                    <div className="flex items-center justify-center gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => moveColumn(editingTable.id, col.id, 'up')}
+                                                            disabled={isFirst}
+                                                            className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-20 transition-colors cursor-pointer text-[10px]"
+                                                            title="上に移動"
+                                                        >
+                                                            ▲
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => moveColumn(editingTable.id, col.id, 'down')}
+                                                            disabled={isLast}
+                                                            className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-20 transition-colors cursor-pointer text-[10px]"
+                                                            title="下に移動"
+                                                        >
+                                                            ▼
+                                                        </button>
+                                                    </div>
+                                                </td>
+
                                                 {/* PK */}
                                                 <td className="px-3 py-1.5 text-center">
                                                     <button
@@ -421,32 +466,68 @@ export const TableEditorModal = ({
                                                 </td>
 
                                                 {/* 説明 */}
-                                                <td className="px-3 py-1.5">
-                                                    <input
-                                                        type="text"
-                                                        value={col.description || ''}
-                                                        onChange={(e) => updateColumn(editingTable.id, col.id, 'description', e.target.value)}
-                                                        className="w-full bg-white border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none text-xs"
-                                                        placeholder="例: 有効/無効、1〜50の範囲"
-                                                    />
-                                                </td>
+                                                 <td className="px-3 py-1.5">
+                                                     <div className="relative flex items-center group/input">
+                                                         <input
+                                                             type="text"
+                                                             value={col.description || ''}
+                                                             onChange={(e) => updateColumn(editingTable.id, col.id, 'description', e.target.value)}
+                                                             className="w-full bg-white border border-gray-200 rounded pl-2 pr-7 py-1 focus:ring-1 focus:ring-blue-500 outline-none text-xs"
+                                                             placeholder="例: 有効/無効、1〜50の範囲"
+                                                         />
+                                                         <button
+                                                             type="button"
+                                                             onClick={() => setDetailEditConfig({
+                                                                 columnId: col.id,
+                                                                 columnName: col.name,
+                                                                 field: 'description',
+                                                                 title: '説明 (AIへの指示)',
+                                                                 value: col.description || ''
+                                                             })}
+                                                             className="absolute right-1.5 text-gray-400 hover:text-blue-500 opacity-0 group-hover/input:opacity-100 focus:opacity-100 transition-opacity p-0.5 cursor-pointer"
+                                                             title="詳細編集を開く"
+                                                         >
+                                                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                             </svg>
+                                                         </button>
+                                                     </div>
+                                                 </td>
 
                                                 {/* 詳細設定 (導出) */}
-                                                {hasDependentColumn && (
-                                                    <td className="px-3 py-1.5">
-                                                        {col.attributeType === 'dependent' ? (
-                                                            <input
-                                                                 type="text"
-                                                                 value={col.derivation || ''}
-                                                                 onChange={(e) => updateColumn(editingTable.id, col.id, 'derivation', e.target.value)}
-                                                                 className="w-full bg-white border border-orange-200 bg-orange-50/30 rounded px-2 py-1 focus:ring-1 focus:ring-orange-500 outline-none text-xs"
-                                                                 placeholder="例: Table.Col via FK"
-                                                             />
-                                                        ) : (
-                                                            <span className="text-gray-300 text-xs">-</span>
-                                                        )}
-                                                    </td>
-                                                )}
+                                                 {hasDependentColumn && (
+                                                     <td className="px-3 py-1.5">
+                                                         {col.attributeType === 'dependent' ? (
+                                                             <div className="relative flex items-center group/input">
+                                                                 <input
+                                                                      type="text"
+                                                                      value={col.derivation || ''}
+                                                                      onChange={(e) => updateColumn(editingTable.id, col.id, 'derivation', e.target.value)}
+                                                                      className="w-full bg-white border border-orange-200 bg-orange-50/30 rounded pl-2 pr-7 py-1 focus:ring-1 focus:ring-orange-500 outline-none text-xs"
+                                                                      placeholder="例: Table.Col via FK"
+                                                                 />
+                                                                 <button
+                                                                     type="button"
+                                                                     onClick={() => setDetailEditConfig({
+                                                                         columnId: col.id,
+                                                                         columnName: col.name,
+                                                                         field: 'derivation',
+                                                                         title: '詳細設定 (導出)',
+                                                                         value: col.derivation || ''
+                                                                     })}
+                                                                     className="absolute right-1.5 text-gray-400 hover:text-orange-600 opacity-0 group-hover/input:opacity-100 focus:opacity-100 transition-opacity p-0.5 cursor-pointer"
+                                                                     title="詳細編集を開く"
+                                                                 >
+                                                                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                     </svg>
+                                                                 </button>
+                                                             </div>
+                                                         ) : (
+                                                             <span className="text-gray-300 text-xs">-</span>
+                                                         )}
+                                                     </td>
+                                                 )}
 
                                                 {/* 動的FK列セルのレンダリング */}
                                                 {tableRels.map(rel => {
@@ -543,6 +624,75 @@ export const TableEditorModal = ({
                     </button>
                 </div>
             </div>
+            
+            {/* 詳細編集ポップアップ */}
+            {detailEditConfig && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div 
+                        className="bg-white rounded-lg shadow-2xl w-[500px] max-w-full flex flex-col border border-gray-200 animate-in zoom-in-95 duration-150"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* ヘッダー */}
+                        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-800">
+                                ${detailEditConfig.title} の編集 <span className="text-xs font-normal text-gray-500">(${detailEditConfig.columnName})</span>
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setDetailEditConfig(null)}
+                                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        
+                        {/* 本文 */}
+                        <div className="p-4 flex flex-col gap-2">
+                            <textarea
+                                value={tempDetailValue}
+                                onChange={(e) => setTempDetailValue(e.target.value)}
+                                className="w-full h-40 p-2.5 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none text-xs font-sans resize-y"
+                                placeholder="${detailEditConfig.title}を入力してください..."
+                                autoFocus
+                                onKeyDown={(e) => {
+                                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleSaveDetail();
+                                    }
+                                    if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setDetailEditConfig(null);
+                                    }
+                                }}
+                            />
+                            {/* メモ */}
+                            <div className="text-[10px] text-gray-400 flex flex-col gap-0.5 mt-1 leading-relaxed">
+                                <div>※ Ctrl + Enter (または Cmd + Enter): 編集内容を確定（保存）してポップアップを閉じる</div>
+                                <div>※ Esc キー: 編集内容を破棄（キャンセル）してポップアップを閉じる</div>
+                            </div>
+                        </div>
+
+                        {/* フッター */}
+                        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2 rounded-b-lg">
+                            <button
+                                type="button"
+                                onClick={() => setDetailEditConfig(null)}
+                                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs font-medium rounded hover:bg-gray-50 transition-colors cursor-pointer"
+                            >
+                                キャンセル
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveDetail}
+                                className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors cursor-pointer"
+                            >
+                                保存
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

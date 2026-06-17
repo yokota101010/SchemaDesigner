@@ -27,8 +27,11 @@ function SchemaDesigner() {
   const [showAiSettingsModal, setShowAiSettingsModal] = useState(false);
   const [showAiLoadingModal, setShowAiLoadingModal] = useState(false);
   const [showAiGeneratePromptModal, setShowAiGeneratePromptModal] = useState(false);
-  const [aiDataInstructions, setAiDataInstructions] = useState(() => {
-      return localStorage.getItem('schema-designer-ai-data-instructions') || '';
+  const [aiInitialInstructions, setAiInitialInstructions] = useState(() => {
+      return localStorage.getItem('schema-designer-ai-initial-instructions') || '';
+  });
+  const [aiOtherInstructions, setAiOtherInstructions] = useState(() => {
+      return localStorage.getItem('schema-designer-ai-other-instructions') || '';
   });
   const [showSqlModal, setShowSqlModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false); 
@@ -61,7 +64,7 @@ function SchemaDesigner() {
       selectedRelId, setSelectedRelId, autoUpdateRelationshipType,
       addTable, deleteTable, initiateDeleteTable, updateTableName, updateTableOrderBy,
       toggleTableMinimize, addColumn, deleteColumn, updateColumn,
-      updateColumnReference, addRow, deleteRow, updateRowValue,
+      updateColumnReference, moveColumn, addRow, deleteRow, updateRowValue,
       startConnectionMode, handleConnect, deleteRelationship,
       addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol,
       addUniqueKey, deleteUniqueKey, toggleUniqueKeyMapping
@@ -180,11 +183,12 @@ function SchemaDesigner() {
       if (!apiKey) return;
 
       // ユーザーの指示をローカルストレージに記憶
-      localStorage.setItem('schema-designer-ai-data-instructions', aiDataInstructions);
+      localStorage.setItem('schema-designer-ai-initial-instructions', aiInitialInstructions);
+      localStorage.setItem('schema-designer-ai-other-instructions', aiOtherInstructions);
 
       setShowAiLoadingModal(true);
       try {
-          const generatedData = await generateMockDataWithAI(tables, relationships, apiKey, 3, aiDataInstructions);
+          const generatedData = await generateMockDataWithAI(tables, relationships, apiKey, 3, aiInitialInstructions, aiOtherInstructions);
           
           setTables(prevTables => {
               return prevTables.map(table => {
@@ -423,7 +427,7 @@ function SchemaDesigner() {
         initiateDeleteTable={initiateDeleteTable} updateTableName={updateTableName} 
         updateTableOrderBy={updateTableOrderBy}
         addColumn={addColumn} updateColumn={updateColumn} 
-        deleteColumn={deleteColumn} 
+        deleteColumn={deleteColumn} moveColumn={moveColumn}
         relationships={relationships} deleteRelationship={deleteRelationship}
         addFkRelationship={addFkRelationship} updateFkRelationshipParent={updateFkRelationshipParent}
         toggleFkMapping={toggleFkMapping} updateFkMappingParentCol={updateFkMappingParentCol}
@@ -437,8 +441,10 @@ function SchemaDesigner() {
       <AiGeneratePromptModal 
         showModal={showAiGeneratePromptModal} 
         setShowModal={setShowAiGeneratePromptModal} 
-        promptText={aiDataInstructions} 
-        setPromptText={setAiDataInstructions} 
+        initialPromptText={aiInitialInstructions} 
+        setInitialPromptText={setAiInitialInstructions} 
+        otherPromptText={aiOtherInstructions} 
+        setOtherPromptText={setAiOtherInstructions} 
         onGenerate={handleExecuteAiGenerateData} 
       />
       

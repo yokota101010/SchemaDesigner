@@ -1,5 +1,5 @@
 import React from 'react';
-import { getTableRect, generateOrthogonalPath } from '../utils/layoutUtils';
+import { calculateRelationshipPath } from '../utils/layoutUtils';
 
 export const RelationshipLines = ({ relationships, tables, viewOffset }) => {
 
@@ -16,49 +16,19 @@ export const RelationshipLines = ({ relationships, tables, viewOffset }) => {
             </defs>
 
             {relationships.map(rel => {
-                const fromTable = tables.find(t => t.id === rel.from);
-                const toTable = tables.find(t => t.id === rel.to);
-                if (!fromTable || !toTable) return null;
-
-                const fromRect = getTableRect(fromTable, viewOffset);
-                const toRect = getTableRect(toTable, viewOffset);
-
-                const isChildBelow = toRect.y > fromRect.y;
-
-                const incomingRels = relationships.filter(r => r.to === rel.to);
-                const sortedIncomingRels = incomingRels.sort((a, b) => {
-                    const tableA = tables.find(t => t.id === a.from);
-                    const tableB = tables.find(t => t.id === b.from);
-                    return (tableA?.y || 0) - (tableB?.y || 0);
-                });
+                const pathInfo = calculateRelationshipPath(rel, tables, relationships, viewOffset);
+                if (!pathInfo) return null;
                 
-                const index = sortedIncomingRels.findIndex(r => r.id === rel.id);
-                const total = incomingRels.length;
-                
-                const gap = 15;
-                const yOffset = (index - (total - 1) / 2) * gap;
-
-                const startX = fromRect.x + 24; 
-                // テーブルの境界から 8px 離れた位置を、関連線（および横棒マーカー）の出発点にします
-                const startY = isChildBelow ? (fromRect.y + fromRect.height + 8) : (fromRect.y - 8);
-
-                const endX = toRect.x;
-                const endY = toRect.y + toRect.height / 2 + yOffset;
-
-                // 共通ユーティリティを使用して直角角丸パスデータを生成
-                const pathData = generateOrthogonalPath(startX, startY, endX, endY, isChildBelow);
-                
-                const isIdentifying = rel.type === 'identifying';
                 const color = "#64748b";
 
                 return (
                     <g key={rel.id} id={`rel-${rel.id}`} className="group pointer-events-none">
                         <path 
-                            d={pathData} 
+                            d={pathInfo.pathData} 
                             stroke={color} 
                             strokeWidth="1.5" 
                             fill="none" 
-                            strokeDasharray={isIdentifying ? "none" : "5,5"} 
+                            strokeDasharray={pathInfo.isIdentifying ? "none" : "5,5"} 
                             markerStart={`url(#marker-one-normal)`}
                             markerEnd={`url(#marker-many-normal)`}
                         />
