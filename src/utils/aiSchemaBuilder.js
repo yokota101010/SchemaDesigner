@@ -143,3 +143,98 @@ export const buildInitialValueParsingSchema = (tables) => {
         required: ['tables']
     };
 };
+
+/**
+ * 全テーブルを一括生成するための Gemini API 用 JSON Schema を構築する (ステップ1用)
+ */
+export const buildAllTablesResponseSchema = (tables) => {
+    const tableProps = {};
+
+    tables.forEach(table => {
+        const columnProps = {};
+        
+        table.columns.forEach(col => {
+            // ステップ1では導出項目（dependent）を除外する
+            if (col.attributeType === 'dependent') return;
+
+            let desc = `Value for column '${col.name}' (${col.type})`;
+            if (col.description) desc += ` [Business Rule/Instruction: ${col.description}]`;
+            if (col.isPk) desc += ' [Primary Key - MUST BE UNIQUE]';
+            if (col.isFk) {
+                const parentTableId = col.reference?.tableId;
+                desc += ` [Foreign Key referencing tableId: '${parentTableId || ''}', columnId: '${col.reference?.columnId || ''}']`;
+            }
+
+            columnProps[col.id] = {
+                type: 'string',
+                description: desc
+            };
+        });
+
+        const requiredCols = table.columns
+            .filter(col => {
+                if (col.attributeType === 'dependent') return false;
+                return col.isPk || col.isFk;
+            })
+            .map(col => col.id);
+
+        tableProps[table.id] = {
+            type: 'array',
+            description: `List of realistic row objects for table '${table.name}'`,
+            items: {
+                type: 'object',
+                properties: columnProps,
+                required: requiredCols
+            }
+        };
+    });
+
+    return {
+        type: 'object',
+        properties: tableProps,
+        required: tables.map(t => t.id)
+    };
+};
+
+/**
+ * 全テーブルの一括導出計算用の JSON Schema を構築する (ステップ2用)
+ */
+export const buildAllTablesDerivationSchema = (tables) => {
+    const tableProps = {};
+
+    tables.forEach(table => {
+        const columnProps = {};
+        
+        table.columns.forEach(col => {
+            let desc = `Value for column '${col.name}' (${col.type})`;
+            if (col.attributeType === 'dependent') {
+                desc += ` [Derived using formula: ${col.derivation || ''}]`;
+            }
+            if (col.isFk) {
+                const parentTableId = col.reference?.tableId;
+                desc += ` [Foreign Key referencing tableId: '${parentTableId || ''}']`;
+            }
+
+            columnProps[col.id] = {
+                type: 'string',
+                description: desc
+            };
+        });
+
+        tableProps[table.id] = {
+            type: 'array',
+            description: `List of rows for table '${table.name}' with derived values filled in`,
+            items: {
+                type: 'object',
+                properties: columnProps,
+                required: table.columns.map(col => col.id)
+            }
+        };
+    });
+
+    return {
+        type: 'object',
+        properties: tableProps,
+        required: tables.map(t => t.id)
+    };
+};

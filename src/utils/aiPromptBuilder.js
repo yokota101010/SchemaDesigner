@@ -11,6 +11,43 @@ import {
 } from './aiPromptTemplates.js';
 
 /**
+ * テーブルのソート順設定を文字列表現で取得する
+ */
+const getSortDescriptions = (table) => {
+    if (!table.orderBy || !table.orderBy.type) return '';
+    let sortKeys = [];
+    if (table.orderBy.keys && table.orderBy.keys.length > 0) {
+        sortKeys = table.orderBy.keys;
+    } else {
+        let sortColIds = [];
+        if (table.orderBy.type === 'pk') {
+            sortColIds = table.columns.filter(c => c.isPk).map(c => c.id);
+        } else if (table.orderBy.type === 'uq' && table.orderBy.uqId) {
+            const targetUq = table.uniqueKeys?.find(uq => uq.id === table.orderBy.uqId);
+            sortColIds = targetUq ? (targetUq.columnIds || []) : [];
+        }
+        const defaultDir = table.orderBy.direction || 'ASC';
+        sortKeys = sortColIds.map(cid => ({
+            columnId: cid,
+            direction: table.orderBy.directions?.[cid] || defaultDir
+        }));
+    }
+    return sortKeys.map(keyInfo => {
+        const col = table.columns.find(c => c.id === keyInfo.columnId);
+        if (!col) return '';
+        const directionText = keyInfo.direction === 'DESC' ? 'descending' : 'ascending';
+        return `'${col.name}' (${directionText})`;
+    }).filter(Boolean).join(', ');
+};
+
+/**
+ * テーブルが順序に基づく引き継ぎ・累積を行う導出カラムを持っているか判定する
+ */
+const hasCarryOverFormula = (table) => {
+    return table.columns?.some(c => c.attributeType === 'dependent');
+};
+
+/**
  * 単一テーブル用のデータ生成用プロンプトを構築する
  */
 export const buildSingleTablePrompt = (table, relationships, parentData = {}, rowCount = 3, otherInstructions = '', includeDependent = false) => {
@@ -102,6 +139,13 @@ export const buildSingleTablePrompt = (table, relationships, parentData = {}, ro
         if (uqText) {
             prompt += `\n### Unique Constraints:\n` + uqText;
         }
+    }
+
+    // 評価順序と引き継ぎに関する制約
+    const sortDesc = getSortDescriptions(table);
+    if (sortDesc && hasCarryOverFormula(table)) {
+        prompt += `\n### Evaluation Order and Carry-Over Constraint:\n`;
+        prompt += `- This table is evaluated sequentially based on the ORDER BY keys: [${sortDesc}]. Some derived columns carry over values from the previous record in this sequence (e.g., previous month's balance, previous row's value). Therefore, when the main sequence key (e.g., date, period, or sequence ID) advances, you MUST continue to generate corresponding rows for all active key/entity combinations (e.g., account codes, categories) that existed in the previous step of the sequence. This ensures the calculation and carry-over chain along the evaluation order is not broken.\n`;
     }
 
     if (otherInstructions) {
@@ -222,5 +266,153 @@ export const buildInitialValueParsingPrompt = (tables, initialInstructions) => {
     prompt += `4. Ensure referential integrity if the user sets values across multiple related tables (e.g., the FK column in table B must match the PK column in table A).\n`;
     prompt += `5. If the instructions do not apply to a specific table, do not generate any rows for that table ID (leave it as an empty array or omit it).\n`;
     
+    return prompt;
+};
+
+/**
+ * データベース全体のモックデータを一括生成するためのプロンプトを構築する (ステップ1用)
+ */
+export const buildAllTablesPrompt = (tables, relationships, parentData = {}, rowCount = 3, otherInstructions = '') => {
+    let prompt = `You are an expert database administrator. Your task is to generate realistic mock data for all tables in a relational database simultaneously, maintaining strict referential integrity and semantic consistency across tables.\n\n`;
+
+    prompt += `### Database Schema Definitions:\n`;
+    tables.forEach(table => {
+        prompt += `- Table: '${table.name}' (ID: '${table.id}')\n`;
+        prompt += `  * Columns:\n`;
+        table.columns.forEach(c => {
+            // ステップ1では導出項目（dependent）は対象外とする
+            if (c.attributeType === 'dependent') return;
+
+            const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(c.id));
+            prompt += `    - Column ID: '${c.id}', Physics Name: '${c.name}', Type: '${c.type}', PK: ${c.isPk}, UQ: ${isColUnique}, FK: ${c.isFk}`;
+            if (c.description) {
+                prompt += `, Description/Instruction: "${c.description}"`;
+            }
+            prompt += '\n';
+        });
+
+        // 既存のモックデータ、またはステップ1でパースされた初期データを取得
+        const parentRows = parentData[table.id] || [];
+        const existingRows = parentRows.length > 0 ? parentRows : (table.rows || []);
+
+        if (existingRows.length > 0) {
+            // IDや画面用のプロパティを省いて実データ値のみを渡す
+            const existingData = existingRows.map(({ id, isMinimized, ...rest }) => rest);
+            prompt += `  * PRE-EXISTING INITIAL ROWS (You MUST preserve these rows exactly as they are in your output rows for this table, do NOT modify them. generate ADDITIONAL rows starting after these): \n`;
+            prompt += `    ` + JSON.stringify(existingData) + '\n';
+        }
+
+        // ユニークキー制約
+        if (table.uniqueKeys && table.uniqueKeys.length > 0) {
+            table.uniqueKeys.forEach((uq, idx) => {
+                const cols = uq.columnIds?.map(id => {
+                    const col = table.columns.find(c => c.id === id);
+                    return col ? col.name : null;
+                }).filter(Boolean) || [];
+                
+                if (cols.length > 0) {
+                    prompt += `  * Unique Constraint ${idx + 1}: Columns (${cols.join(', ')}) must be unique together.\n`;
+                }
+            });
+        }
+
+        const sortDesc = getSortDescriptions(table);
+        if (sortDesc && hasCarryOverFormula(table)) {
+            prompt += `  * Evaluation Order and Carry-Over Constraint: This table is evaluated sequentially based on the ORDER BY keys: [${sortDesc}]. Some derived columns carry over values from the previous record in this sequence (e.g., previous month's balance, previous row's value). Therefore, when the main sequence key (e.g., date, period, or sequence ID) advances, you MUST continue to generate corresponding rows for all active key/entity combinations (e.g., account codes, categories) that existed in the previous step of the sequence. This ensures the calculation and carry-over chain along the evaluation order is not broken.\n`;
+        }
+        prompt += '\n';
+    });
+
+    prompt += `### Relationships (Referential Integrity Constraints):\n`;
+    relationships.forEach(r => {
+        if (r.from && r.to && r.mappings && r.mappings.length > 0) {
+            prompt += `- Table '${r.from}' (parent) is referenced by Table '${r.to}' (child) on mappings:\n`;
+            r.mappings.forEach(m => {
+                prompt += `  * Parent Column ID '${m.parentColId}' = Child Column ID '${m.childColId}'\n`;
+            });
+        }
+    });
+
+    if (otherInstructions) {
+        prompt += `\n### User General Rules & Business Requirements:\n`;
+        prompt += `"${otherInstructions}"\n`;
+    }
+
+    prompt += `\n### Mock Data Generation Rules:\n`;
+    prompt += `1. For each table, generate approximately ${rowCount} realistic rows (in addition to any pre-existing initial rows listed above) by default. However, complying with all database schemas, referential integrity constraints, uniqueness constraints, and evaluation/calculation rules is your HIGHEST PRIORITY. You MUST automatically increase the number of generated rows for any table if it is logically required to maintain consistent relationships, business logic, or evaluation chains (such as ensuring carry-over records exist for all active keys when a sequence/order-by key advances) across the database. Never compromise data integrity to fit the row count limit.\n`;
+    prompt += `2. You MUST maintain referential integrity. Child tables' foreign key columns MUST EXACTLY match one of the parent tables' primary key values generated in the same response or present in pre-existing rows.\n`;
+    prompt += `3. Maintain semantic consistency across tables (e.g. transaction dates, accounts, descriptions should align logically).\n`;
+    prompt += `4. Format the output JSON as an object mapping each Table ID to an array of row objects.\n`;
+
+    return prompt;
+};
+
+/**
+ * データベース全体のすべての導出項目を一括計算するためのプロンプトを構築する (ステップ2用)
+ */
+export const buildAllTablesDerivationPrompt = (tables, allGeneratedData, otherInstructions = '') => {
+    let prompt = `You are a database engine. Your task is to calculate and populate all derived (dependent) column values for all tables in the database, ensuring perfect mathematical correctness and consistent values based on pre-existing raw data.\n\n`;
+
+    prompt += `### Database Schema and Derivation Formulas:\n`;
+    tables.forEach(table => {
+        prompt += `- Table: '${table.name}' (ID: '${table.id}')\n`;
+        const depCols = table.columns.filter(c => c.attributeType === 'dependent');
+        if (depCols.length > 0) {
+            prompt += `  * Derived Columns & Calculation Formulas:\n`;
+            depCols.forEach(col => {
+                prompt += `    - Column ID: '${col.id}', Physics Name: '${col.name}': Formula is [${col.derivation || ''}]\n`;
+            });
+        }
+
+        // orderBy 設定をプロンプトに含める
+        if (table.orderBy && table.orderBy.type) {
+            let sortKeys = [];
+            if (table.orderBy.keys && table.orderBy.keys.length > 0) {
+                sortKeys = table.orderBy.keys;
+            } else {
+                let sortColIds = [];
+                if (table.orderBy.type === 'pk') {
+                    sortColIds = table.columns.filter(c => c.isPk).map(c => c.id);
+                } else if (table.orderBy.type === 'uq' && table.orderBy.uqId) {
+                    const targetUq = table.uniqueKeys?.find(uq => uq.id === table.orderBy.uqId);
+                    sortColIds = targetUq ? (targetUq.columnIds || []) : [];
+                }
+                const defaultDir = table.orderBy.direction || 'ASC';
+                sortKeys = sortColIds.map(cid => ({
+                    columnId: cid,
+                    direction: table.orderBy.directions?.[cid] || defaultDir
+                }));
+            }
+
+            const sortDescriptions = sortKeys.map(keyInfo => {
+                const col = table.columns.find(c => c.id === keyInfo.columnId);
+                if (!col) return '';
+                const directionText = keyInfo.direction === 'DESC' ? 'descending' : 'ascending';
+                return `'${col.name}' (${directionText})`;
+            }).filter(Boolean);
+
+            if (sortDescriptions.length > 0) {
+                prompt += `  * Sorting/Calculation Sequence (IMPORTANT): You MUST process the rows of this table sequentially in this order: ${sortDescriptions.join(', ')}. Carry over any running totals (e.g. transaction balances, monthly summaries) step-by-step from top to bottom based on this order.\n`;
+            }
+        }
+        prompt += '\n';
+    });
+
+    prompt += `### Current Database Mock Data (derived columns are empty or incomplete):\n`;
+    tables.forEach(table => {
+        prompt += `- Table Name: '${table.name}' (ID: '${table.id}'):\n`;
+        prompt += JSON.stringify(allGeneratedData[table.id] || [], null, 2) + `\n\n`;
+    });
+
+    if (otherInstructions) {
+        prompt += `### User Rules & Requirements:\n`;
+        prompt += `* Instructions: "${otherInstructions}"\n\n`;
+    }
+
+    prompt += `### Instructions for Calculations:\n`;
+    prompt += `1. You MUST calculate the derived values for all tables. Do NOT change, insert, or delete any of the existing raw data values (such as transaction amounts, names, or dates). Just compute and fill in the missing derived values.\n`;
+    prompt += `2. Pay extreme attention to sequential running totals (like '口座残高', '月初残高', '月末残高'). You must calculate them progressively based on the specified sort order (e.g. sorting by time or年月). Ensure that previous row's final balance properly becomes the current row's starting balance.\n`;
+    prompt += `3. Return the complete updated JSON dataset containing all rows and columns for all tables with the derived fields filled in.\n`;
+
     return prompt;
 };
