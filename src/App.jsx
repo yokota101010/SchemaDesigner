@@ -113,7 +113,7 @@ function SchemaDesigner() {
       setCrudFunctions(INITIAL_CRUD_FUNCTIONS);
       setCrudData(INITIAL_CRUD_DATA);
       setAiInstructions("");
-      setProjectName('Demo Project');
+      setProjectName(DEFAULT_PROJECT_NAME);
   }, [setTables, setRelationships, setCrudFunctions, setCrudData]);
 
   useEffect(() => {
