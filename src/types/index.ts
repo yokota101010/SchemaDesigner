@@ -67,16 +67,7 @@ export interface Relationship {
   mappings: RelationshipMapping[];
 }
 
-export interface CrudFunction {
-  id: string;
-  name: string;
-}
 
-export interface CrudData {
-  [functionId: string]: {
-    [tableId: string]: string[];
-  };
-}
 
 export interface ValueObjectPropertyPreset {
   name: string;
@@ -90,14 +81,28 @@ export interface ValueObjectPreset {
   properties: ValueObjectPropertyPreset[];
 }
 
+export interface Aggregate {
+  id: string;
+  name: string;
+}
+
+export interface AggregateAssignment {
+  aggregateId: string;
+  role: 'R' | 'M';
+}
+
+export interface AggregateData {
+  [tableId: string]: AggregateAssignment;
+}
+
 export interface ProjectData {
   name: string;
   tables: Table[];
   relationships: Relationship[];
-  crudFunctions: CrudFunction[];
-  crudData: CrudData;
-  aiInstructions: string;
   valueObjects?: ValueObjectPreset[];
+  aggregates?: Aggregate[];
+  aggregateData?: AggregateData;
+  aggregateTableOrder?: string[];
   version?: string;
   exportedAt?: string;
 }

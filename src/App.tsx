@@ -1,19 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { DEFAULT_PROJECT_NAME, INITIAL_TABLES, INITIAL_RELATIONSHIPS, INITIAL_CRUD_FUNCTIONS, INITIAL_CRUD_DATA, INITIAL_VALUE_OBJECTS } from './constants';
+import { DEFAULT_PROJECT_NAME, INITIAL_TABLES, INITIAL_RELATIONSHIPS, INITIAL_VALUE_OBJECTS, INITIAL_AGGREGATES, INITIAL_AGGREGATE_DATA, INITIAL_AGGREGATE_TABLE_ORDER } from './constants';
 
 import { useSchemaState } from './hooks/useSchemaState';
-import { useCrudState } from './hooks/useCrudState';
+import { useAggregateState } from './hooks/useAggregateState';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
 
-import { generateSQL as generateSQLUtil } from './utils/sqlGenerator';
+
 
 import { Header } from './components/Header';
 import { Canvas } from './components/Canvas';
 import { ConfirmModal } from './components/modals/ConfirmModal';
-import { HelpModal } from './components/modals/HelpModal';
-import { SqlModal } from './components/modals/SqlModal';
-import { PromptModal } from './components/modals/PromptModal';
-import { CrudModal } from './components/modals/CrudModal';
+import { AggregateModal } from './components/modals/AggregateModal';
 import { TableEditorModal } from './components/modals/TableEditorModal';
 import { AiSettingsModal } from './components/modals/AiSettingsModal';
 import { AiLoadingModal } from './components/modals/AiLoadingModal';
@@ -25,7 +22,6 @@ import { Table, Relationship } from './types';
 
 function SchemaDesigner() {
   const [projectName, setProjectName] = useState<string>(DEFAULT_PROJECT_NAME);
-  const [aiInstructions, setAiInstructions] = useState<string>("");
 
   const [showAiSettingsModal, setShowAiSettingsModal] = useState<boolean>(false);
   const [showValueObjectSettingsModal, setShowValueObjectSettingsModal] = useState<boolean>(false);
@@ -38,12 +34,10 @@ function SchemaDesigner() {
   const [aiOtherInstructions, setAiOtherInstructions] = useState<string>(() => {
       return localStorage.getItem('schema-designer-ai-other-instructions') || '';
   });
-  const [showSqlModal, setShowSqlModal] = useState<boolean>(false);
-  const [showHelpModal, setShowHelpModal] = useState<boolean>(false); 
-  const [showCrudModal, setShowCrudModal] = useState<boolean>(false); 
-  const [showPromptModal, setShowPromptModal] = useState<boolean>(false);
-  const [generatedSql, setGeneratedSql] = useState<string>('');
-
+  const [showAggregateModal, setShowAggregateModal] = useState<boolean>(false); 
+  const [backupAggregates, setBackupAggregates] = useState<any[] | null>(null);
+  const [backupAggregateData, setBackupAggregateData] = useState<any | null>(null);
+  const [backupAggregateTableOrder, setBackupAggregateTableOrder] = useState<string[] | null>(null);
   const [mainViewOffset, setMainViewOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [subViewOffset, setSubViewOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -106,11 +100,30 @@ function SchemaDesigner() {
       setEditingTableId(null);
   };
 
-  const crudState = useCrudState(requestConfirmation);
+  const aggregateState = useAggregateState(requestConfirmation);
   const {
-      crudFunctions, setCrudFunctions, crudData, setCrudData,
-      addCrudFunction, updateCrudFunctionName, deleteCrudFunction, toggleCrudValue
-  } = crudState;
+      aggregates, setAggregates, aggregateData, setAggregateData,
+      aggregateTableOrder, setAggregateTableOrder,
+      addAggregate, updateAggregateName, deleteAggregate,
+      assignTableToAggregate, removeTableFromAggregate,
+      alignTablesByAggregate, moveTableOrder
+  } = aggregateState;
+
+  const handleOpenAggregateModal = () => {
+      setBackupAggregates(JSON.parse(JSON.stringify(aggregates)));
+      setBackupAggregateData(JSON.parse(JSON.stringify(aggregateData)));
+      setBackupAggregateTableOrder(JSON.parse(JSON.stringify(aggregateTableOrder)));
+      setShowAggregateModal(true);
+  };
+
+  const handleCancelAggregateEdit = () => {
+      if (backupAggregates && backupAggregateData && backupAggregateTableOrder) {
+          setAggregates(backupAggregates);
+          setAggregateData(backupAggregateData);
+          setAggregateTableOrder(backupAggregateTableOrder);
+      }
+      setShowAggregateModal(false);
+  };
 
   const dragState = useDragAndDrop(
       tables, setTables, relationships, 
@@ -121,11 +134,11 @@ function SchemaDesigner() {
       setTables(INITIAL_TABLES);
       setRelationships(INITIAL_RELATIONSHIPS);
       setValueObjects(INITIAL_VALUE_OBJECTS);
-      setCrudFunctions(INITIAL_CRUD_FUNCTIONS);
-      setCrudData(INITIAL_CRUD_DATA);
-      setAiInstructions("");
+      setAggregates(INITIAL_AGGREGATES);
+      setAggregateData(INITIAL_AGGREGATE_DATA);
+      setAggregateTableOrder(INITIAL_AGGREGATE_TABLE_ORDER);
       setProjectName(DEFAULT_PROJECT_NAME);
-  }, [setTables, setRelationships, setValueObjects, setCrudFunctions, setCrudData]);
+  }, [setTables, setRelationships, setValueObjects, setAggregates, setAggregateData, setAggregateTableOrder]);
 
   useEffect(() => {
     try {
@@ -142,9 +155,9 @@ function SchemaDesigner() {
             
             setRelationships(parsed.relationships || []);
             setValueObjects(parsed.valueObjects || INITIAL_VALUE_OBJECTS);
-            setCrudFunctions(parsed.crudFunctions || []);
-            setCrudData(parsed.crudData || {});
-            setAiInstructions(parsed.aiInstructions || "");
+            setAggregates(parsed.aggregates || INITIAL_AGGREGATES);
+            setAggregateData(parsed.aggregateData || INITIAL_AGGREGATE_DATA);
+            setAggregateTableOrder(parsed.aggregateTableOrder || INITIAL_AGGREGATE_TABLE_ORDER);
             setMainViewOffset({ x: 0, y: 0 });
             setSubViewOffset({ x: 0, y: 0 });
         } else {
@@ -155,7 +168,77 @@ function SchemaDesigner() {
         loadDemoData();
     }
     setIsLoading(false);
-  }, [loadDemoData, setTables, setRelationships, setValueObjects, setCrudFunctions, setCrudData]);
+  }, [loadDemoData, setTables, setRelationships, setValueObjects, setAggregates, setAggregateData, setAggregateTableOrder]);
+
+  // テーブルと集約の自動初期化・同期ロジック
+  useEffect(() => {
+      if (isLoading) return;
+
+      let hasChanges = false;
+      let nextAggregates = [...aggregates];
+      let nextAggregateData = { ...aggregateData };
+      let nextOrder = [...aggregateTableOrder];
+
+      // 1. tables の中に、現在 aggregateData に所属が登録されていないテーブルがある場合、自動的に集約を作成して Root として割り当てる
+      tables.forEach(table => {
+          if (!nextAggregateData[table.id]) {
+              const newAggId = `agg_auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              nextAggregates.push({
+                  id: newAggId,
+                  name: table.name
+              });
+              nextAggregateData[table.id] = {
+                  aggregateId: newAggId,
+                  role: 'R'
+              };
+              if (!nextOrder.includes(table.id)) {
+                  nextOrder.push(table.id);
+              }
+              hasChanges = true;
+          }
+      });
+
+      // 2. 逆に、tables に存在しないテーブルIDが aggregateData や aggregateTableOrder に残っている場合のクリーンアップ
+      const tableIds = tables.map(t => t.id);
+      Object.keys(nextAggregateData).forEach(tableId => {
+          if (!tableIds.includes(tableId)) {
+              delete nextAggregateData[tableId];
+              hasChanges = true;
+          }
+      });
+
+      const filteredOrder = nextOrder.filter(id => tableIds.includes(id));
+      if (filteredOrder.length !== nextOrder.length) {
+          nextOrder = filteredOrder;
+          hasChanges = true;
+      }
+
+      // 3. 集約名自動追従: 単一テーブルのみが属している集約の名前を、テーブル名と同期する
+      tables.forEach(table => {
+          const assignment = nextAggregateData[table.id];
+          if (assignment) {
+              const aggIndex = nextAggregates.findIndex(a => a.id === assignment.aggregateId);
+              if (aggIndex !== -1) {
+                  const agg = nextAggregates[aggIndex];
+                  // この集約に属する他のテーブルがあるか確認
+                  const otherTablesInAgg = tables.filter(t => t.id !== table.id && nextAggregateData[t.id]?.aggregateId === agg.id);
+                  if (otherTablesInAgg.length === 0) {
+                      // 他に所属テーブルがない単一テーブル集約の場合、集約名がテーブル名と異なるなら同期する
+                      if (agg.name !== table.name) {
+                          nextAggregates[aggIndex] = { ...agg, name: table.name };
+                          hasChanges = true;
+                      }
+                  }
+              }
+          }
+      });
+
+      if (hasChanges) {
+          setAggregates(nextAggregates);
+          setAggregateData(nextAggregateData);
+          setAggregateTableOrder(nextOrder);
+      }
+  }, [tables, isLoading, aggregates, aggregateData, aggregateTableOrder, setAggregates, setAggregateData, setAggregateTableOrder]);
 
   useEffect(() => {
       if (isLoading) return;
@@ -170,13 +253,13 @@ function SchemaDesigner() {
         tables: cleanedTables,
         relationships,
         valueObjects,
-        crudFunctions,
-        crudData,
-        aiInstructions,
+        aggregates,
+        aggregateData,
+        aggregateTableOrder,
         updatedAt: new Date().toISOString()
       };
       localStorage.setItem('schema-designer-autosave-v1', JSON.stringify(saveData));
-  }, [projectName, tables, relationships, valueObjects, crudFunctions, crudData, aiInstructions, isLoading]);
+  }, [projectName, tables, relationships, valueObjects, aggregates, aggregateData, aggregateTableOrder, isLoading]);
 
   const handleAiGenerateData = () => {
       const apiKey = localStorage.getItem('schema-designer-gemini-apikey');
@@ -236,9 +319,9 @@ function SchemaDesigner() {
             setProjectName(DEFAULT_PROJECT_NAME);
             setTables(INITIAL_TABLES);
             setRelationships(INITIAL_RELATIONSHIPS);
-            setCrudFunctions([]);
-            setCrudData({});
-            setAiInstructions("");
+            setAggregates([]);
+            setAggregateData({});
+            setAggregateTableOrder([]);
             setMainViewOffset({ x: 0, y: 0 });
             setSubViewOffset({ x: 0, y: 0 });
           },
@@ -259,9 +342,9 @@ function SchemaDesigner() {
       tables: cleanedTables,
       relationships,
       valueObjects,
-      crudFunctions,
-      crudData,
-      aiInstructions,
+      aggregates,
+      aggregateData,
+      aggregateTableOrder,
       version: "1.3", 
       exportedAt: new Date().toISOString()
     };
@@ -336,9 +419,9 @@ function SchemaDesigner() {
 
                 setRelationships(json.relationships);
                 setValueObjects(json.valueObjects || INITIAL_VALUE_OBJECTS);
-                setCrudFunctions(json.crudFunctions || []);
-                setCrudData(json.crudData || {});
-                setAiInstructions(json.aiInstructions || "");
+                setAggregates(json.aggregates || []);
+                setAggregateData(json.aggregateData || {});
+                setAggregateTableOrder(json.aggregateTableOrder || []);
                 setMainViewOffset({ x: 0, y: 0 });
                 setSubViewOffset({ x: 0, y: 0 });
             },
@@ -361,7 +444,7 @@ function SchemaDesigner() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tables, relationships, valueObjects, projectName, crudFunctions, crudData, aiInstructions]);
+  }, [tables, relationships, valueObjects, projectName, aggregates, aggregateData, aggregateTableOrder]);
 
   useEffect(() => {
     const onDragMove = (e: any) => dragState.handleDragMove(e, canvasRef);
@@ -384,11 +467,7 @@ function SchemaDesigner() {
     };
   }, [dragState.draggingId, dragState.isPanning, dragState.handleDragMove, dragState.handleDragEnd]);
 
-  const generateSQL = () => {
-      const sql = generateSQLUtil(tables, relationships);
-      setGeneratedSql(sql);
-      setShowSqlModal(true);
-  };
+
 
   const editingTable = tables.find(t => t.id === editingTableId) || null;
 
@@ -398,8 +477,8 @@ function SchemaDesigner() {
         projectName={projectName} setProjectName={setProjectName}
         handleNewProject={handleNewProject} handleImportClick={handleImportClick}
         handleExportJSON={handleExportJSON} fileInputRef={fileInputRef} handleFileChange={handleFileChange}
-        setShowPromptModal={setShowPromptModal} setShowCrudModal={setShowCrudModal}
-        addTable={() => addTable(canvasRef)} generateSQL={generateSQL} setShowHelpModal={setShowHelpModal}
+        onOpenAggregateModal={handleOpenAggregateModal}
+        addTable={() => addTable(canvasRef)}
         onAiGenerateData={handleAiGenerateData} onOpenAiSettings={() => setShowAiSettingsModal(true)}
         onOpenValueObjectSettings={() => setShowValueObjectSettingsModal(true)}
       />
@@ -425,18 +504,29 @@ function SchemaDesigner() {
         onAlignSubTables={alignSubTables}
       />
 
-      <PromptModal showPromptModal={showPromptModal} setShowPromptModal={setShowPromptModal} aiInstructions={aiInstructions} setAiInstructions={setAiInstructions} />
+
       
-      <CrudModal 
-        showCrudModal={showCrudModal} setShowCrudModal={setShowCrudModal} 
-        tables={tables} crudFunctions={crudFunctions} crudData={crudData} 
-        addCrudFunction={addCrudFunction} updateCrudFunctionName={updateCrudFunctionName} 
-        deleteCrudFunction={deleteCrudFunction} toggleCrudValue={toggleCrudValue} 
+      <AggregateModal
+        showAggregateModal={showAggregateModal}
+        setShowAggregateModal={setShowAggregateModal}
+        onCancel={handleCancelAggregateEdit}
+        tables={tables}
+        aggregates={aggregates}
+        aggregateData={aggregateData}
+        aggregateTableOrder={aggregateTableOrder}
+        setAggregateTableOrder={setAggregateTableOrder}
+        addAggregate={addAggregate}
+        updateAggregateName={updateAggregateName}
+        deleteAggregate={deleteAggregate}
+        assignTableToAggregate={assignTableToAggregate}
+        removeTableFromAggregate={removeTableFromAggregate}
+        alignTablesByAggregate={alignTablesByAggregate}
+        moveTableOrder={moveTableOrder}
       />
       
-      <SqlModal showSqlModal={showSqlModal} setShowSqlModal={setShowSqlModal} generatedSql={generatedSql} />
+
       
-      <HelpModal showHelpModal={showHelpModal} setShowHelpModal={setShowHelpModal} />
+
       
       <TableEditorModal 
         editingTable={editingTable} tables={tables} 

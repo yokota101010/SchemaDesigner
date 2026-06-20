@@ -1,4 +1,4 @@
-import { Relationship, CrudFunction, CrudData, Table, ValueObjectPreset, ValueObjectPropertyPreset } from '../types';
+import { Relationship, Table, ValueObjectPreset, ValueObjectPropertyPreset, Aggregate, AggregateData } from '../types';
 
 /**
  * データ型定義
@@ -26,9 +26,13 @@ const INITIAL_TABLES: Table[] = [];
 
 const INITIAL_RELATIONSHIPS: Relationship[] = [];
 
-const INITIAL_CRUD_FUNCTIONS: CrudFunction[] = [];
 
-const INITIAL_CRUD_DATA: CrudData = {};
+
+const INITIAL_AGGREGATES: Aggregate[] = [];
+
+const INITIAL_AGGREGATE_DATA: AggregateData = {};
+
+const INITIAL_AGGREGATE_TABLE_ORDER: string[] = [];
 
 const STORAGE_KEY = 'schema-designer-projects-v1';
 
@@ -61,8 +65,9 @@ export {
   DEFAULT_PROJECT_NAME,
   INITIAL_TABLES,
   INITIAL_RELATIONSHIPS,
-  INITIAL_CRUD_FUNCTIONS,
-  INITIAL_CRUD_DATA,
+  INITIAL_AGGREGATES,
+  INITIAL_AGGREGATE_DATA,
+  INITIAL_AGGREGATE_TABLE_ORDER,
   STORAGE_KEY,
   INITIAL_VALUE_OBJECTS
 };

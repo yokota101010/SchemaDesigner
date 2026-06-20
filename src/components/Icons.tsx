@@ -45,3 +45,4 @@ export const FileText: React.FC<IconProps> = (p) => <Icon name="file-lines" {...
 export const Eye: React.FC<IconProps> = (p) => <Icon name="eye" {...p} />;
 export const EyeOff: React.FC<IconProps> = (p) => <Icon name="eye-slash" {...p} />;
 export const Move: React.FC<IconProps> = (p) => <Icon name="arrows-up-down-left-right" {...p} />;
+export const Layers: React.FC<IconProps> = (p) => <Icon name="layer-group" {...p} />;
