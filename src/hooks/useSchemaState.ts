@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
-import { INITIAL_TABLES, INITIAL_RELATIONSHIPS } from '../constants';
-import { syncRelationshipsWithTables } from '../utils/relationshipUtils';
-import { Table, Relationship, Column, OrderBy } from '../types';
+import { INITIAL_TABLES, INITIAL_RELATIONSHIPS, INITIAL_VALUE_OBJECTS } from '../constants';
+import { syncRelationshipsWithTables, cleanRelationshipsForValueObjects } from '../utils/relationshipUtils';
+import { Table, Relationship, Column, OrderBy, ValueObjectPreset, ValueObjectPropertyPreset } from '../types';
+import { getVisibleColumns } from '../utils/schemaUtils';
 
 export const useSchemaState = (
   viewOffset: { x: number; y: number },
@@ -9,6 +10,7 @@ export const useSchemaState = (
 ) => {
   const [tables, setTables] = useState<Table[]>(INITIAL_TABLES);
   const [relationships, setRelationships] = useState<Relationship[]>(INITIAL_RELATIONSHIPS);
+  const [valueObjects, setValueObjects] = useState<ValueObjectPreset[]>(INITIAL_VALUE_OBJECTS);
   const [editingTableId, setEditingTableId] = useState<string | null>(null); 
   const [connectionMode, setConnectionMode] = useState<{ fromId: string } | null>(null); 
   const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
@@ -37,7 +39,21 @@ export const useSchemaState = (
                   });
               });
 
+              // 値オブジェクトの親カラムIDのセット
+              const parentColIds = new Set(
+                  table.columns.filter(c => c.parentColumnId).map(c => c.parentColumnId)
+              );
+
               const updatedColumns = table.columns.map(col => {
+                  // 値オブジェクト親カラムは絶対に外部キーにしない
+                  if (parentColIds.has(col.id)) {
+                      return {
+                          ...col,
+                          isFk: false,
+                          reference: undefined
+                      };
+                  }
+
                   const fkInfo = mappedCols.get(col.id);
                   if (fkInfo) {
                       return {
@@ -59,6 +75,10 @@ export const useSchemaState = (
       });
   }, [setRelationships, setTables]);
 
+  const updateTableViewPane = (tableId: string, viewPane: 'main' | 'sub') => {
+    setTables(tables.map(t => t.id === tableId ? { ...t, viewPane } : t));
+  };
+
   // --- Table Operations ---
   const addTable = (canvasRef: React.RefObject<HTMLDivElement | null>) => {
     const centerX = -viewOffset.x + (canvasRef.current ? canvasRef.current.clientWidth / 2 : 100);
@@ -71,6 +91,7 @@ export const useSchemaState = (
       x: centerX,
       y: centerY,
       isMinimized: false,
+      viewPane: 'main',
       columns: [
         { id: `col_${Date.now()}`, name: 'id', type: 'BIGINT', isPk: true, isUnique: false, isFk: false, attributeType: 'independent', derivation: '', isVisible: true }
       ],
@@ -79,6 +100,12 @@ export const useSchemaState = (
   };
 
   const deleteTable = (id: string) => {
+    const isReferencedInTable = tables.some(t => t.id !== id && t.columns.some(c => c.type === `FK:${id}`));
+    const isReferencedInVO = valueObjects.some(vo => vo.properties.some(p => p.type === `FK:${id}`));
+    if (isReferencedInTable || isReferencedInVO) {
+        alert("このテーブルは、値オブジェクトまたは他のテーブルのデータ型(FK)として参照されているため削除できません。");
+        return;
+    }
     setTables(prev => prev.filter(t => t.id !== id));
     const remainingRels = relationships.filter(r => r.from !== id && r.to !== id);
     updateRelationshipsAndSync(remainingRels);
@@ -88,6 +115,12 @@ export const useSchemaState = (
   };
 
   const initiateDeleteTable = (id: string) => {
+      const isReferencedInTable = tables.some(t => t.id !== id && t.columns.some(c => c.type === `FK:${id}`));
+      const isReferencedInVO = valueObjects.some(vo => vo.properties.some(p => p.type === `FK:${id}`));
+      if (isReferencedInTable || isReferencedInVO) {
+          alert("このテーブルは、値オブジェクトまたは他のテーブルのデータ型(FK)として参照されているため削除できません。");
+          return;
+      }
       requestConfirmation(
           "テーブル削除",
           "このテーブルを削除しますか？関連するリレーションも削除されます。",
@@ -127,19 +160,21 @@ export const useSchemaState = (
   const deleteColumn = (tableId: string, colId: string) => {
     setTables(tables.map(t => {
       if (t.id === tableId) {
+        const colsToDelete = [colId, ...t.columns.filter(c => c.parentColumnId === colId).map(c => c.id)];
+        
         const newRows = t.rows.map(row => {
             const newRow = { ...row };
-            delete newRow[colId];
+            colsToDelete.forEach(cid => delete newRow[cid]);
             return newRow;
         });
         const uqs = t.uniqueKeys || [];
         const cleanedUqs = uqs.map(uq => ({
           ...uq,
-          columnIds: uq.columnIds ? uq.columnIds.filter(id => id !== colId) : []
+          columnIds: uq.columnIds ? uq.columnIds.filter(id => !colsToDelete.includes(id)) : []
         }));
         return {
           ...t,
-          columns: t.columns.filter(c => c.id !== colId),
+          columns: t.columns.filter(c => !colsToDelete.includes(c.id)),
           rows: newRows,
           uniqueKeys: cleanedUqs
         };
@@ -147,17 +182,22 @@ export const useSchemaState = (
       return t;
     }));
 
+    const targetTable = tables.find(t => t.id === tableId);
+    const colsToDelete = targetTable 
+      ? [colId, ...targetTable.columns.filter(c => c.parentColumnId === colId).map(c => c.id)] 
+      : [colId];
+
     const cleanedRels = relationships.map(rel => {
         if (rel.to === tableId && rel.mappings) {
             return {
                 ...rel,
-                mappings: rel.mappings.filter(m => m.childColId !== colId)
+                mappings: rel.mappings.filter(m => !colsToDelete.includes(m.childColId))
             };
         }
         if (rel.from === tableId && rel.mappings) {
             return {
                 ...rel,
-                mappings: rel.mappings.filter(m => m.parentColId !== colId)
+                mappings: rel.mappings.filter(m => m.parentColId ? !colsToDelete.includes(m.parentColId) : true)
             };
         }
         return rel;
@@ -166,15 +206,111 @@ export const useSchemaState = (
   };
 
   const updateColumn = (tableId: string, colId: string, field: keyof Column, value: any) => {
-    setTables(tables.map(t => {
+    const nextTables = tables.map(t => {
       if (t.id === tableId) {
+        let updatedCols = t.columns.map(c => c.id === colId ? { ...c, [field]: value } : c);
+        
+        if (field === 'type') {
+          const targetCol = updatedCols.find(c => c.id === colId);
+          if (targetCol) {
+            // 古い子カラムを削除
+            updatedCols = updatedCols.filter(c => c.parentColumnId !== colId);
+            
+            if (value.startsWith('FK:')) {
+              const refTableId = value.substring(3);
+              const refTable = tables.find(t => t.id === refTableId);
+              const refPkCol = refTable?.columns.find(c => c.isPk);
+              if (refPkCol) {
+                updatedCols = updatedCols.map(c => c.id === colId ? {
+                  ...c,
+                  type: value,
+                  isFk: true,
+                  reference: { tableId: refTableId, columnId: refPkCol.id }
+                } : c);
+              }
+            } else {
+              updatedCols = updatedCols.map(c => c.id === colId ? {
+                ...c,
+                type: value,
+                isFk: false,
+                reference: undefined
+              } : c);
+
+              const voPreset = valueObjects.find(vo => vo.name === value);
+              if (voPreset) {
+                const parentIndex = updatedCols.findIndex(c => c.id === colId);
+                const newChildren: Column[] = voPreset.properties.map((prop: ValueObjectPropertyPreset) => ({
+                  id: `col_vo_${colId}_${prop.name}`,
+                  name: `${targetCol.name}_${prop.name}`,
+                  type: prop.type,
+                  isPk: false,
+                  isUnique: false,
+                  isFk: false,
+                  attributeType: 'independent',
+                  derivation: '',
+                  isVisible: true,
+                  description: prop.description,
+                  parentColumnId: colId,
+                  isVoProperty: true,
+                  voPropertyName: prop.name
+                }));
+                updatedCols.splice(parentIndex + 1, 0, ...newChildren);
+              }
+            }
+          }
+        }
+        
+        if (field === 'name') {
+          const targetCol = updatedCols.find(c => c.id === colId);
+          if (targetCol) {
+            const voPreset = valueObjects.find(vo => vo.name === targetCol.type);
+            if (voPreset) {
+              updatedCols = updatedCols.map(c => {
+                if (c.parentColumnId === colId && c.isVoProperty) {
+                  return {
+                    ...c,
+                    name: `${value}_${c.voPropertyName}`
+                  };
+                }
+                return c;
+              });
+            }
+          }
+        }
+
+        // 親カラムIDのセットを取得
+        const parentColIds = new Set(
+          updatedCols.filter(c => c.parentColumnId).map(c => c.parentColumnId)
+        );
+
+        // 親カラムについては、attributeType, derivation, isFk, reference を強制的にクリアする
+        updatedCols = updatedCols.map(c => {
+          if (parentColIds.has(c.id)) {
+            return {
+              ...c,
+              attributeType: 'independent',
+              derivation: '',
+              isFk: false,
+              reference: undefined
+            };
+          }
+          return c;
+        });
+
         return {
           ...t,
-          columns: t.columns.map(c => c.id === colId ? { ...c, [field]: value } : c)
+          columns: updatedCols
         };
       }
       return t;
-    }));
+    });
+
+    setTables(nextTables);
+    if (field === 'type') {
+      const cleanedRels = cleanRelationshipsForValueObjects(nextTables, relationships);
+      const nextRels = syncRelationshipsWithTables(nextTables, cleanedRels);
+      updateRelationshipsAndSync(nextRels);
+    }
   };
 
   const moveColumn = useCallback((tableId: string, colId: string, direction: 'up' | 'down') => {
@@ -417,15 +553,185 @@ export const useSchemaState = (
     }));
   };
 
+  const updateValueObjects = (newVOs: ValueObjectPreset[]) => {
+    setValueObjects(newVOs);
+    
+    const nextTables = tables.map(table => {
+        const constraintBackup = new Map<string, Partial<Column>>();
+        table.columns.forEach(c => {
+          if (c.isVoProperty && c.parentColumnId && c.voPropertyName) {
+            constraintBackup.set(`${c.parentColumnId}_${c.voPropertyName}`, {
+              isPk: c.isPk,
+              isUnique: c.isUnique,
+              isFk: c.isFk,
+              reference: c.reference,
+              attributeType: c.attributeType,
+              derivation: c.derivation,
+              isVisible: c.isVisible
+            });
+          }
+        });
+
+        const parentCols = table.columns.filter(c => !c.isVoProperty);
+        const finalCols: Column[] = [];
+
+        parentCols.forEach(col => {
+          const voPreset = newVOs.find(vo => vo.name === col.type);
+          if (voPreset) {
+            // 親カラム自身をクリーンアップして追加
+            finalCols.push({
+              ...col,
+              attributeType: 'independent',
+              derivation: '',
+              isFk: false,
+              reference: undefined
+            });
+
+            voPreset.properties.forEach((prop: ValueObjectPropertyPreset) => {
+              const backupKey = `${col.id}_${prop.name}`;
+              const backup = constraintBackup.get(backupKey);
+
+              let propType = prop.type;
+              let isFk = backup?.isFk ?? false;
+              let reference = backup?.reference;
+
+              if (prop.type.startsWith('FK:')) {
+                const refTableId = prop.type.substring(3);
+                const refTable = tables.find(t => t.id === refTableId);
+                const refPkCol = refTable?.columns.find(c => c.isPk);
+                if (refPkCol) {
+                  propType = refPkCol.type;
+                  isFk = true;
+                  reference = { tableId: refTableId, columnId: refPkCol.id };
+                }
+              }
+
+              finalCols.push({
+                id: `col_vo_${col.id}_${prop.name}`,
+                name: `${col.name}_${prop.name}`,
+                type: propType,
+                isPk: backup?.isPk ?? false,
+                isUnique: backup?.isUnique ?? false,
+                isFk: isFk,
+                attributeType: backup?.attributeType ?? 'independent',
+                derivation: backup?.derivation ?? '',
+                isVisible: backup?.isVisible ?? true,
+                description: prop.description,
+                parentColumnId: col.id,
+                isVoProperty: true,
+                voPropertyName: prop.name,
+                reference: reference
+              });
+            });
+          } else {
+            finalCols.push(col);
+          }
+        });
+
+        return { ...table, columns: finalCols };
+    });
+
+    setTables(nextTables);
+    
+    const cleanedRels = cleanRelationshipsForValueObjects(nextTables, relationships);
+    const nextRels = syncRelationshipsWithTables(nextTables, cleanedRels);
+    updateRelationshipsAndSync(nextRels);
+  };
+
+  const alignSubTables = useCallback(() => {
+    const subTables = tables.filter(t => t.viewPane === 'sub');
+    if (subTables.length === 0) return;
+
+    const sorted = [...subTables].sort((a, b) => a.name.localeCompare(b.name));
+
+    const getTableWidth = (table: Table) => {
+      const el = document.getElementById(`table-${table.id}`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0) return rect.width;
+      }
+      
+      const visibleCols = getVisibleColumns(table);
+      
+      let estimatedColsWidth = 0;
+      visibleCols.forEach(col => {
+        const nameLen = col.name ? col.name.length : 0;
+        const colWidth = Math.max(100, nameLen * 8 + 30);
+        estimatedColsWidth += colWidth;
+      });
+
+      return Math.max(180, estimatedColsWidth + 80);
+    };
+
+    const getTableHeight = (table: Table) => {
+      const el = document.getElementById(`table-${table.id}`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.height > 0) return rect.height;
+      }
+      if (table.isMinimized) return 40;
+      const headerHeight = 40;
+      const visibleCols = getVisibleColumns(table);
+      const columnsHeight = visibleCols.length * 22;
+      const rowsHeight = table.rows.length * 32;
+      const footerHeight = 40;
+      return headerHeight + columnsHeight + rowsHeight + footerHeight;
+    };
+
+    const col1X = 50;
+    const marginX = 40;
+    const marginY = 40;
+
+    let col1Height = 40;
+    let col2Height = 40;
+    let maxCol1Width = 180;
+
+    const placements = sorted.map(table => {
+      const width = getTableWidth(table);
+      const height = getTableHeight(table);
+      
+      let column: 1 | 2 = 1;
+      let y = 0;
+
+      if (col2Height < col1Height) {
+        column = 2;
+        y = col2Height;
+        col2Height += height + marginY;
+      } else {
+        column = 1;
+        y = col1Height;
+        col1Height += height + marginY;
+        if (width > maxCol1Width) {
+          maxCol1Width = width;
+        }
+      }
+
+      return { table, column, y };
+    });
+
+    const col2X = col1X + maxCol1Width + marginX;
+
+    const updatedSubTables = placements.map(({ table, column, y }) => {
+      const x = column === 1 ? col1X : col2X;
+      return { ...table, x, y };
+    });
+
+    const subTableMap = new Map(updatedSubTables.map(t => [t.id, t]));
+    setTables(tables.map(t => subTableMap.get(t.id) || t));
+  }, [tables, setTables]);
+
   return {
     tables, setTables,
     relationships, setRelationships,
+    valueObjects, setValueObjects, updateValueObjects,
     editingTableId, setEditingTableId,
     connectionMode, setConnectionMode,
     selectedRelId, setSelectedRelId,
     autoUpdateRelationshipType,
     addTable, deleteTable, initiateDeleteTable,
     updateTableName, updateTableOrderBy, toggleTableMinimize,
+    updateTableViewPane,
+    alignSubTables,
     addColumn, deleteColumn, updateColumn, updateColumnReference,
     moveColumn,
     addRow, deleteRow, updateRowValue,

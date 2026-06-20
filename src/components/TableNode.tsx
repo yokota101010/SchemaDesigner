@@ -1,6 +1,7 @@
 import React from 'react';
 import { GripHorizontal, Plus, Settings, Trash2, ChevronDown, ChevronUp, Key, KeyRound, LinkIcon, FunctionSquare, X } from './Icons';
 import { Table } from '../types';
+import { getVisibleColumns } from '../utils/schemaUtils';
 
 interface TableNodeProps {
     table: Table;
@@ -24,6 +25,8 @@ export const TableNode: React.FC<TableNodeProps> = ({
     return (
         <div
             id={`table-${table.id}`}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             className={`absolute flex flex-col bg-white rounded shadow-lg border transition-shadow duration-200 z-10
                 ${connectionMode?.fromId === table.id ? 'ring-2 ring-blue-500 shadow-blue-200' : 'hover:shadow-xl border-gray-300'}
             `}
@@ -82,14 +85,12 @@ export const TableNode: React.FC<TableNodeProps> = ({
                     <thead className="text-gray-600 font-semibold select-none bg-gray-50/50">
                         <tr>
                             <th className="px-2 py-1.5 border-b border-gray-200 w-8 text-center text-gray-400">#</th>
-                            {table.columns.map(col => {
+                            {getVisibleColumns(table).map(col => {
                                 const isDependent = col.attributeType === 'dependent';
                                 const refTable = col.reference?.tableId ? tables.find(t => t.id === col.reference?.tableId) : null;
                                 const refCol = refTable?.columns.find(c => c.id === col.reference?.columnId);
                                 const refLabel = refTable && refCol ? `${refTable.name}.${refCol.name}` : '';
                                 const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(col.id));
-
-                                if (col.isVisible === false && !col.isPk && !isColUnique && !col.isFk) return null;
 
                                 return (
                                     <th 
@@ -119,9 +120,8 @@ export const TableNode: React.FC<TableNodeProps> = ({
                             {table.rows.map((row, idx) => (
                                 <tr key={row.id} className="group hover:bg-blue-50/30">
                                     <td className="px-2 py-1 border-b border-gray-100 text-center text-gray-300 select-none">{idx + 1}</td>
-                                    {table.columns.map(col => {
+                                    {getVisibleColumns(table).map(col => {
                                         const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(col.id));
-                                        if (col.isVisible === false && !col.isPk && !isColUnique && !col.isFk) return null;
                                         return (
                                             <td key={col.id} className={`p-0 border-b border-gray-100 border-l border-gray-50 ${col.attributeType === 'dependent' ? 'bg-orange-50/10' : ''}`}>
                                                 <input 

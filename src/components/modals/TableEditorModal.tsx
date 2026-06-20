@@ -3,11 +3,12 @@ import { Settings, X, Plus, KeyRound, Trash2, LinkIcon } from '../Icons';
 import { OrderBySettings } from './table-editor/OrderBySettings';
 import { ColumnRow } from './table-editor/ColumnRow';
 import { DetailEditPopup, DetailEditConfig } from './table-editor/DetailEditPopup';
-import { Table, UniqueKey, Relationship, OrderBy, Column } from '../../types';
+import { Table, UniqueKey, Relationship, OrderBy, Column, ValueObjectPreset } from '../../types';
 
 interface TableEditorModalProps {
     editingTable: Table | null;
     tables: Table[];
+    valueObjects: ValueObjectPreset[];
     initiateDeleteTable: (tableId: string) => void;
     updateTableName: (tableId: string, name: string) => void;
     updateTableOrderBy: (tableId: string, orderBy: OrderBy) => void;
@@ -24,18 +25,20 @@ interface TableEditorModalProps {
     addUniqueKey: (tableId: string) => void;
     deleteUniqueKey: (tableId: string, uqId: string) => void;
     toggleUniqueKeyMapping: (tableId: string, uqId: string, columnId: string, isChecked: boolean) => void;
+    updateTableViewPane: (tableId: string, viewPane: 'main' | 'sub') => void;
     onComplete: () => void;
     onCancel: () => void;
 }
 
 export const TableEditorModal: React.FC<TableEditorModalProps> = ({
-    editingTable, tables,
+    editingTable, tables, valueObjects,
     initiateDeleteTable, updateTableName, updateTableOrderBy, addColumn, updateColumn,
     deleteColumn, moveColumn,
     relationships, deleteRelationship,
     addFkRelationship, updateFkRelationshipParent,
     toggleFkMapping, updateFkMappingParentCol,
     addUniqueKey, deleteUniqueKey, toggleUniqueKeyMapping,
+    updateTableViewPane,
     onComplete, onCancel
 }) => {
     const [detailEditConfig, setDetailEditConfig] = useState<DetailEditConfig | null>(null);
@@ -60,6 +63,25 @@ export const TableEditorModal: React.FC<TableEditorModalProps> = ({
             updateColumn(editingTable.id, detailEditConfig.columnId, detailEditConfig.field, value);
             setDetailEditConfig(null);
         }
+    };
+
+    const handleComplete = () => {
+        const isReferenced = tables.some(t => t.id !== editingTable.id && t.columns.some(c => c.type === `FK:${editingTable.id}`)) ||
+                             valueObjects.some(vo => vo.properties.some(p => p.type === `FK:${editingTable.id}`));
+
+        if (isReferenced) {
+            const pkCols = editingTable.columns.filter(c => c.isPk);
+            if (pkCols.length !== 1) {
+                alert("このテーブルは他のテーブルや値オブジェクトからデータ型(FK)として参照されているため、単独主キー以外の構成に変更することはできません。");
+                return;
+            }
+
+            if (editingTable.viewPane === 'main') {
+                alert("このテーブルは他のテーブルや値オブジェクトからデータ型(FK)として参照されているため、メインビューに移動することはできません。");
+                return;
+            }
+        }
+        onComplete();
     };
 
     return (
@@ -87,14 +109,27 @@ export const TableEditorModal: React.FC<TableEditorModalProps> = ({
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-6">
-                    <div className="mb-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">テーブル名</label>
-                        <input
-                            type="text"
-                            value={editingTable.name}
-                            onChange={(e) => updateTableName(editingTable.id, e.target.value)}
-                            className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-sm"
-                        />
+                    <div className="flex gap-4 mb-6">
+                        <div className="flex-1 max-w-sm">
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">テーブル名</label>
+                            <input
+                                type="text"
+                                value={editingTable.name}
+                                onChange={(e) => updateTableName(editingTable.id, e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-sm"
+                            />
+                        </div>
+                        <div className="w-48">
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">配置ペイン</label>
+                            <select
+                                value={editingTable.viewPane || 'main'}
+                                onChange={(e) => updateTableViewPane(editingTable.id, e.target.value as 'main' | 'sub')}
+                                className="w-full px-3 py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer text-sm"
+                            >
+                                <option value="main">メインビュー</option>
+                                <option value="sub">サブビュー</option>
+                            </select>
+                        </div>
                     </div>
 
                     <OrderBySettings 
@@ -220,6 +255,7 @@ export const TableEditorModal: React.FC<TableEditorModalProps> = ({
                                                 tables={tables}
                                                 tableRels={tableRels}
                                                 tableUqs={tableUqs}
+                                                valueObjects={valueObjects}
                                                 hasDependentColumn={hasDependentColumn}
                                                 moveColumn={moveColumn}
                                                 updateColumn={updateColumn}
@@ -247,7 +283,7 @@ export const TableEditorModal: React.FC<TableEditorModalProps> = ({
                         キャンセル
                     </button>
                     <button 
-                        onClick={onComplete} 
+                        onClick={handleComplete} 
                         className="px-4 py-2 bg-blue-600 text-white font-medium rounded hover:bg-blue-700 transition-colors shadow-sm text-sm cursor-pointer"
                     >
                         完了

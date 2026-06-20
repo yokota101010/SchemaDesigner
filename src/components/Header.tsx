@@ -16,12 +16,13 @@ interface HeaderProps {
     setShowHelpModal: (show: boolean) => void;
     onAiGenerateData: () => void;
     onOpenAiSettings: () => void;
+    onOpenValueObjectSettings: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
     projectName, setProjectName, handleNewProject, handleImportClick, handleExportJSON, fileInputRef, handleFileChange,
     setShowPromptModal, setShowCrudModal, addTable, generateSQL, setShowHelpModal,
-    onAiGenerateData, onOpenAiSettings
+    onAiGenerateData, onOpenAiSettings, onOpenValueObjectSettings
 }) => {
     return (
         <div className="bg-white border-b border-gray-200 px-3 py-2 shadow-sm flex items-center justify-between z-20 h-12">
@@ -78,23 +79,41 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             
             <div className="flex items-center gap-2">
+                {/* 値オブジェクト設定 */}
                 <button 
-                    onClick={onOpenAiSettings} 
-                    className="flex items-center justify-center p-1.5 bg-white border border-gray-300 text-gray-500 rounded hover:bg-gray-50 hover:text-gray-700 shadow-sm transition-colors cursor-pointer" 
-                    title="AI・APIキー設定"
+                    onClick={onOpenValueObjectSettings} 
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-gray-300 text-gray-600 rounded hover:bg-gray-50 hover:text-gray-800 shadow-sm transition-colors cursor-pointer text-xs font-semibold" 
+                    title="値オブジェクト定義"
                 >
-                    <Settings className="w-4 h-4" />
+                    <Workflow className="w-3.5 h-3.5 text-gray-500" />
+                    <span>値オブジェクト設定</span>
                 </button>
 
-                <button 
-                    onClick={onAiGenerateData} 
-                    className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded hover:from-violet-700 hover:to-indigo-700 shadow-sm transition-all text-xs font-semibold cursor-pointer animate-in fade-in duration-200"
-                    title="AIでサンプルデータ自動生成"
-                >
-                    <Workflow className="w-3.5 h-3.5" />
-                    <span>AIサンプル生成</span>
-                </button>
+                {/* 区切り縦線 */}
+                <div className="h-5 w-px bg-gray-200 mx-1"></div>
 
+                {/* AIデータ生成セット (APIキー設定 + AIサンプル生成) */}
+                <div className="flex items-center gap-1 bg-slate-100/80 border border-slate-200 rounded-lg p-0.5">
+                    <button 
+                        onClick={onOpenAiSettings} 
+                        className="flex items-center gap-1 px-2 py-1 bg-white border border-gray-200 text-gray-600 rounded hover:bg-gray-50 hover:text-gray-800 shadow-sm transition-colors cursor-pointer text-xs font-semibold" 
+                        title="AI・APIキー設定"
+                    >
+                        <Settings className="w-3.5 h-3.5 text-gray-500" />
+                        <span className="hidden sm:inline">APIキー設定</span>
+                    </button>
+
+                    <button 
+                        onClick={onAiGenerateData} 
+                        className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded hover:from-violet-700 hover:to-indigo-700 shadow-sm transition-all text-xs font-semibold cursor-pointer animate-in fade-in duration-200"
+                        title="AIでサンプルデータ自動生成"
+                    >
+                        <Workflow className="w-3.5 h-3.5" />
+                        <span>AIサンプル生成</span>
+                    </button>
+                </div>
+
+                {/* 区切り縦線 */}
                 <div className="h-5 w-px bg-gray-200 mx-1"></div>
 
                 <button onClick={() => setShowPromptModal(true)} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 shadow-sm transition-colors text-xs font-medium">

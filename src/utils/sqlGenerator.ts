@@ -1,4 +1,5 @@
-import { Table, Relationship } from '../types';
+import { Table, Relationship, Column } from '../types';
+import { resolveColumnType } from './schemaUtils';
 
 export const generateSQL = (tables: Table[], relationships: Relationship[]): string => {
   let sql = '';
@@ -35,10 +36,12 @@ export const generateSQL = (tables: Table[], relationships: Relationship[]): str
   });
 
   tables.forEach(table => {
+    const physicalColumns = table.columns.filter(col => !table.columns.some(c => c.parentColumnId === col.id));
     sql += `CREATE TABLE ${table.name} (\n`;
     
-    const colDefs = table.columns.map(col => {
-      let def = `  ${col.name} ${col.type}`;
+    const colDefs = physicalColumns.map(col => {
+      const resolvedType = resolveColumnType(col, tables);
+      let def = `  ${col.name} ${resolvedType}`;
       if (col.attributeType === 'dependent') {
           const derivation = col.derivation ? ` [${col.derivation}]` : '';
           def += ` /* Derived (導出項目)${derivation} */`;
@@ -46,7 +49,7 @@ export const generateSQL = (tables: Table[], relationships: Relationship[]): str
       return def;
     });
 
-    const pkCols = table.columns.filter(c => c.isPk);
+    const pkCols = physicalColumns.filter(c => c.isPk);
     if (pkCols.length > 0) {
         const pkNames = pkCols.map(c => c.name).join(', ');
         colDefs.push(`  PRIMARY KEY (${pkNames})`);
@@ -55,7 +58,7 @@ export const generateSQL = (tables: Table[], relationships: Relationship[]): str
     if (table.uniqueKeys && table.uniqueKeys.length > 0) {
         table.uniqueKeys.forEach(uq => {
             const cols = uq.columnIds?.map(id => {
-                const col = table.columns.find(c => c.id === id);
+                const col = physicalColumns.find(c => c.id === id);
                 return col ? col.name : null;
             }).filter(Boolean) || [];
 
@@ -96,12 +99,14 @@ export const generateSQL = (tables: Table[], relationships: Relationship[]): str
       sql += `-- Example Data --\n`;
       tablesWithData.forEach(table => {
           if (table.rows.length === 0) return;
-          const colNames = table.columns.map(c => c.name).join(', ');
+          const physicalColumns = table.columns.filter(col => !table.columns.some(c => c.parentColumnId === col.id));
+          const colNames = physicalColumns.map(c => c.name).join(', ');
           table.rows.forEach(row => {
-              const values = table.columns.map(col => {
+              const values = physicalColumns.map(col => {
                   const val = row[col.id];
                   if (val === undefined || val === null || val === '') return 'NULL';
-                  if (['INT','BIGINT','DECIMAL','FLOAT'].some(t => col.type.startsWith(t))) {
+                  const resolvedType = resolveColumnType(col, tables);
+                  if (['INT','BIGINT','DECIMAL','FLOAT'].some(t => resolvedType.startsWith(t))) {
                       return val;
                   }
                   return `'${val.replace(/'/g, "''")}'`;

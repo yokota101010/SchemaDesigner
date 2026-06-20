@@ -17,6 +17,10 @@ export interface Column {
   reference?: ColumnReference;
   isSelfContainedDependent?: boolean;
   isFirstPhaseCalculable?: boolean;
+  // 値オブジェクト関連
+  parentColumnId?: string;
+  isVoProperty?: boolean;
+  voPropertyName?: string;
 }
 
 export interface UniqueKey {
@@ -47,6 +51,7 @@ export interface Table {
   rows: any[]; // 行データは動的キーなので any または Record<string, any>
   orderBy?: OrderBy;
   uniqueKeys?: UniqueKey[];
+  viewPane?: 'main' | 'sub';
 }
 
 export interface RelationshipMapping {
@@ -73,6 +78,18 @@ export interface CrudData {
   };
 }
 
+export interface ValueObjectPropertyPreset {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface ValueObjectPreset {
+  name: string;
+  description?: string;
+  properties: ValueObjectPropertyPreset[];
+}
+
 export interface ProjectData {
   name: string;
   tables: Table[];
@@ -80,6 +97,7 @@ export interface ProjectData {
   crudFunctions: CrudFunction[];
   crudData: CrudData;
   aiInstructions: string;
+  valueObjects?: ValueObjectPreset[];
   version?: string;
   exportedAt?: string;
 }

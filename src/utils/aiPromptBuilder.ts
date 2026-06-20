@@ -1,4 +1,5 @@
-import { Table, Relationship } from '../types';
+import { Table, Relationship, ValueObjectPreset, Column } from '../types';
+import { INITIAL_VALUE_OBJECTS } from '../constants';
 import { 
     AI_PROMPT_SYSTEM_ROLE,
     AI_PROMPT_REFERENTIAL_INTEGRITY_HEADER,
@@ -8,8 +9,20 @@ import {
     AI_PROMPT_USER_INSTRUCTIONS_HEADER,
     AI_PROMPT_GENERATION_RULES,
     AI_PROMPT_DERIVATION_ROLE,
-    AI_PROMPT_DERIVATION_RULES
+    AI_PROMPT_DERIVATION_RULES,
+    AI_PROMPT_DERIVATION_VERIFICATION_RULES
 } from './aiPromptTemplates';
+import { resolveColumnType } from './schemaUtils';
+
+const getColumnTypeDescription = (col: Column, tables: Table[]): string => {
+  if (col.type && col.type.startsWith('FK:')) {
+    const refTableId = col.type.substring(3);
+    const refTable = tables.find(t => t.id === refTableId);
+    const resolvedType = resolveColumnType(col, tables);
+    return `${resolvedType} (FK referencing ${refTable ? refTable.name : 'unknown table'})`;
+  }
+  return col.type;
+};
 
 /**
  * テーブルのソート順設定を文字列表現で取得する
@@ -49,6 +62,40 @@ const hasCarryOverFormula = (table: Table): boolean => {
 };
 
 /**
+ * テーブル内の値オブジェクトに関するマッピングとビジネスルール制約のテキスト表現を取得する
+ */
+const getVoConstraintsText = (table: Table, valueObjects: ValueObjectPreset[] = INITIAL_VALUE_OBJECTS): string => {
+    const voParentCols = table.columns.filter(col => 
+        table.columns.some(c => c.parentColumnId === col.id)
+    );
+
+    if (voParentCols.length === 0) return '';
+
+    let text = `\n### Value Object Constraints:\n`;
+    
+    voParentCols.forEach(parentCol => {
+        const voPreset = valueObjects.find(vo => vo.name === parentCol.type);
+        if (!voPreset) return;
+
+        const childCols = table.columns.filter(c => c.parentColumnId === parentCol.id);
+        
+        text += `- Column group '${parentCol.name}' (${parentCol.type} VO) properties mapping:\n`;
+        childCols.forEach(child => {
+            if (child.voPropertyName) {
+                text += `  * '${child.voPropertyName}' maps to physical column '${child.name}'\n`;
+            }
+        });
+
+        if (voPreset.description) {
+            text += `  * Business Rules/Constraints: "${voPreset.description}"\n`;
+        }
+        text += '\n';
+    });
+
+    return text;
+};
+
+/**
  * 単一テーブル用のデータ生成用プロンプトを構築する
  */
 export const buildSingleTablePrompt = (
@@ -57,15 +104,22 @@ export const buildSingleTablePrompt = (
   parentData: Record<string, any[]> = {}, 
   rowCount = 3, 
   otherInstructions = '', 
-  includeDependent = false
+  includeDependent = false,
+  valueObjects?: ValueObjectPreset[]
 ): string => {
     let prompt = AI_PROMPT_SYSTEM_ROLE(table.name, table.id) + `\n\n### Table Columns:\n`;
 
+    const physicalColIds = table.columns.filter(c => !table.columns.some(x => x.parentColumnId === c.id)).map(c => c.id);
+
     table.columns.forEach(c => {
+        const isVoParent = table.columns.some(x => x.parentColumnId === c.id);
+        if (isVoParent) return;
+
         if (!includeDependent && c.attributeType === 'dependent' && !c.isFirstPhaseCalculable) return;
 
         const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(c.id));
-        prompt += `- Column ID: '${c.id}', Physics Name: '${c.name}', Data Type: '${c.type}', PK: ${c.isPk}, UQ: ${isColUnique}, FK: ${c.isFk}`;
+        const typeDesc = getColumnTypeDescription(c, tables);
+        prompt += `- Column ID: '${c.id}', Physics Name: '${c.name}', Data Type: '${typeDesc}', PK: ${c.isPk}, UQ: ${isColUnique}, FK: ${c.isFk}`;
         if (c.description) {
             prompt += `, Description/Instruction: "${c.description}"`;
         }
@@ -117,7 +171,13 @@ export const buildSingleTablePrompt = (
 
     if (table.rows && table.rows.length > 0) {
         prompt += AI_PROMPT_EXISTING_DATA_HEADER;
-        const existingData = table.rows.map(({ id, isMinimized, ...rest }: any) => rest);
+        const existingData = table.rows.map((row: any) => {
+            const cleanRow: any = {};
+            physicalColIds.forEach(id => {
+                if (row[id] !== undefined) cleanRow[id] = row[id];
+            });
+            return cleanRow;
+        });
         prompt += JSON.stringify(existingData, null, 2) + '\n';
         prompt += `\n* CRITICAL INSTRUCTION FOR EXISTING DATA (INITIAL RECORDS):\n`;
         prompt += `- The existing rows listed above represent FIXED INITIAL/STARTING data. You MUST PRESERVE all these existing rows exactly as they are. Do NOT modify their values, and do NOT delete them.\n`;
@@ -147,6 +207,11 @@ export const buildSingleTablePrompt = (
         prompt += `- This table is evaluated sequentially based on the ORDER BY keys: [${sortDesc}]. Some derived columns carry over values from the previous record in this sequence (e.g., previous month's balance, previous row's value). Therefore, when the main sequence key (e.g., date, period, or sequence ID) advances, you MUST continue to generate corresponding rows for all active key/entity combinations (e.g., account codes, categories) that existed in the previous step of the sequence. This ensures the calculation and carry-over chain along the evaluation order is not broken.\n`;
     }
 
+    const voConstraints = getVoConstraintsText(table, valueObjects);
+    if (voConstraints) {
+        prompt += voConstraints;
+    }
+
     if (otherInstructions) {
         prompt += AI_PROMPT_USER_INSTRUCTIONS_HEADER(otherInstructions, table.name, table.id);
     }
@@ -171,6 +236,9 @@ export const buildSingleTableDerivationPrompt = (
     
     prompt += `### Target Table '${table.name}' Columns:\n`;
     table.columns.forEach(col => {
+        const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+        if (isVoParent) return;
+
         const isDep = col.attributeType === 'dependent';
         prompt += `- Column ID: '${col.id}', Physics Name: '${col.name}'${isDep ? ` (Derived using formula: [${col.derivation}])` : ''}\n`;
     });
@@ -186,6 +254,9 @@ export const buildSingleTableDerivationPrompt = (
                 prompt += `- Table Name: '${refTable.name}' (ID: '${tId}'):\n`;
                 prompt += `  * Columns Map:\n`;
                 refTable.columns.forEach(col => {
+                    const isVoParent = refTable.columns.some(x => x.parentColumnId === col.id);
+                    if (isVoParent) return;
+
                     prompt += `    - Column ID: '${col.id}', Physics Name: '${col.name}'\n`;
                 });
                 prompt += `  * Data:\n`;
@@ -251,7 +322,11 @@ export const buildInitialValueParsingPrompt = (tables: Table[], initialInstructi
         prompt += `- Table Name: '${table.name}' (ID: '${table.id}')\n`;
         prompt += `  * Columns:\n`;
         table.columns.forEach(col => {
-            prompt += `    - Column ID: '${col.id}', Physics Name: '${col.name}', Type: '${col.type}', PK: ${col.isPk}, FK: ${col.isFk}`;
+            const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+            if (isVoParent) return;
+
+            const typeDesc = getColumnTypeDescription(col, tables);
+            prompt += `    - Column ID: '${col.id}', Physics Name: '${col.name}', Type: '${typeDesc}', PK: ${col.isPk}, FK: ${col.isFk}`;
             if (col.description) {
                 prompt += `, Description: "${col.description}"`;
             }
@@ -281,7 +356,8 @@ export const buildAllTablesPrompt = (
   relationships: Relationship[], 
   parentData: Record<string, any[]> = {}, 
   rowCount = 3, 
-  otherInstructions = ''
+  otherInstructions = '',
+  valueObjects?: ValueObjectPreset[]
 ): string => {
     let prompt = `You are an expert database administrator. Your task is to generate realistic mock data for all tables in a relational database simultaneously, maintaining strict referential integrity and semantic consistency across tables.\n\n`;
 
@@ -289,11 +365,17 @@ export const buildAllTablesPrompt = (
     tables.forEach(table => {
         prompt += `- Table: '${table.name}' (ID: '${table.id}')\n`;
         prompt += `  * Columns:\n`;
+        const physicalColIds = table.columns.filter(c => !table.columns.some(x => x.parentColumnId === c.id)).map(c => c.id);
+
         table.columns.forEach(c => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === c.id);
+            if (isVoParent) return;
+
             if (c.attributeType === 'dependent') return;
 
             const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(c.id));
-            prompt += `    - Column ID: '${c.id}', Physics Name: '${c.name}', Type: '${c.type}', PK: ${c.isPk}, UQ: ${isColUnique}, FK: ${c.isFk}`;
+            const typeDesc = getColumnTypeDescription(c, tables);
+            prompt += `    - Column ID: '${c.id}', Physics Name: '${c.name}', Type: '${typeDesc}', PK: ${c.isPk}, UQ: ${isColUnique}, FK: ${c.isFk}`;
             if (c.description) {
                 prompt += `, Description/Instruction: "${c.description}"`;
             }
@@ -304,9 +386,26 @@ export const buildAllTablesPrompt = (
         const existingRows = parentRows.length > 0 ? parentRows : (table.rows || []);
 
         if (existingRows.length > 0) {
-            const existingData = existingRows.map(({ id, isMinimized, ...rest }: any) => rest);
-            prompt += `  * PRE-EXISTING INITIAL ROWS (You MUST preserve these rows exactly as they are in your output rows for this table, do NOT modify them. generate ADDITIONAL rows starting after these): \n`;
+            const existingData = existingRows.map((row: any) => {
+                const cleanRow: any = {};
+                physicalColIds.forEach(id => {
+                    if (row[id] !== undefined) cleanRow[id] = row[id];
+                });
+                return cleanRow;
+            });
+            if (table.viewPane === 'sub') {
+                prompt += `  * PRE-EXISTING INITIAL ROWS (This is a sub-view master table. You MUST preserve these rows exactly as they are in your output rows for this table. Do NOT modify them, and do NOT generate any additional rows for this table. Only return these rows): \n`;
+            } else {
+                prompt += `  * PRE-EXISTING INITIAL ROWS (You MUST preserve these rows exactly as they are in your output rows for this table, do NOT modify them. generate ADDITIONAL rows starting after these): \n`;
+            }
             prompt += `    ` + JSON.stringify(existingData) + '\n';
+        } else if (table.viewPane === 'sub') {
+            prompt += `  * NOTE: This is a sub-view master table. It currently has no pre-existing rows. Do NOT generate any rows for this table.\n`;
+        }
+
+        const voConstraints = getVoConstraintsText(table, valueObjects);
+        if (voConstraints) {
+            prompt += voConstraints;
         }
 
         if (table.uniqueKeys && table.uniqueKeys.length > 0) {
@@ -345,10 +444,11 @@ export const buildAllTablesPrompt = (
     }
 
     prompt += `\n### Mock Data Generation Rules:\n`;
-    prompt += `1. For each table, generate approximately ${rowCount} realistic rows (in addition to any pre-existing initial rows listed above) by default. However, complying with all database schemas, referential integrity constraints, uniqueness constraints, and evaluation/calculation rules is your HIGHEST PRIORITY. You MUST automatically increase the number of generated rows for any table if it is logically required to maintain consistent relationships, business logic, or evaluation chains (such as ensuring carry-over records exist for all active keys when a sequence/order-by key advances) across the database. Never compromise data integrity to fit the row count limit.\n`;
-    prompt += `2. You MUST maintain referential integrity. Child tables' foreign key columns MUST EXACTLY match one of the parent tables' primary key values generated in the same response or present in pre-existing rows.\n`;
-    prompt += `3. Maintain semantic consistency across tables (e.g. transaction dates, accounts, descriptions should align logically).\n`;
-    prompt += `4. Format the output JSON as an object mapping each Table ID to an array of row objects.\n`;
+    prompt += `1. For each main-view table (tables not in sub-view), generate approximately ${rowCount} realistic rows (in addition to any pre-existing initial rows listed above) by default. However, complying with all database schemas, referential integrity constraints, uniqueness constraints, and evaluation/calculation rules is your HIGHEST PRIORITY. You MUST automatically increase the number of generated rows for any table if it is logically required to maintain consistent relationships, business logic, or evaluation chains (such as ensuring carry-over records exist for all active keys when a sequence/order-by key advances) across the database. Never compromise data integrity to fit the row count limit.\n`;
+    prompt += `2. For any sub-view table (viewPane: 'sub'), do NOT generate any additional rows. You MUST only output the pre-existing rows provided for that table. If the sub-view table has no pre-existing rows, output an empty array for that table ID.\n`;
+    prompt += `3. You MUST maintain referential integrity. Child tables' foreign key columns MUST EXACTLY match one of the parent tables' primary key values generated in the same response or present in pre-existing rows.\n`;
+    prompt += `4. Maintain semantic consistency across tables (e.g. transaction dates, accounts, descriptions should align logically).\n`;
+    prompt += `5. Format the output JSON as an object mapping each Table ID to an array of row objects.\n`;
 
     return prompt;
 };
@@ -366,7 +466,7 @@ export const buildAllTablesDerivationPrompt = (
     prompt += `### Database Schema and Derivation Formulas:\n`;
     tables.forEach(table => {
         prompt += `- Table: '${table.name}' (ID: '${table.id}')\n`;
-        const depCols = table.columns.filter(c => c.attributeType === 'dependent');
+        const depCols = table.columns.filter(c => c.attributeType === 'dependent' && !table.columns.some(x => x.parentColumnId === c.id));
         if (depCols.length > 0) {
             prompt += `  * Derived Columns & Calculation Formulas:\n`;
             depCols.forEach(col => {
@@ -421,7 +521,8 @@ export const buildAllTablesDerivationPrompt = (
     prompt += `### Instructions for Calculations:\n`;
     prompt += `1. You MUST calculate the derived values for all tables. Do NOT change, insert, or delete any of the existing raw data values (such as transaction amounts, names, or dates). Just compute and fill in the missing derived values.\n`;
     prompt += `2. Pay extreme attention to sequential running totals (like '口座残高', '月初残高', '月末残高'). You must calculate them progressively based on the specified sort order (e.g. sorting by time or年月). Ensure that previous row's final balance properly becomes the current row's starting balance.\n`;
-    prompt += `3. Return the complete updated JSON dataset containing all rows and columns for all tables with the derived fields filled in.\n`;
+    prompt += `\n### Verification and Output Process (CRITICAL):\n`;
+    prompt += AI_PROMPT_DERIVATION_VERIFICATION_RULES;
 
     return prompt;
 };

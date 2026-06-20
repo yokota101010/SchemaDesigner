@@ -1,4 +1,4 @@
-import { Relationship, CrudFunction, CrudData, Table } from '../types';
+import { Relationship, CrudFunction, CrudData, Table, ValueObjectPreset, ValueObjectPropertyPreset } from '../types';
 
 /**
  * データ型定義
@@ -32,6 +32,29 @@ const INITIAL_CRUD_DATA: CrudData = {};
 
 const STORAGE_KEY = 'schema-designer-projects-v1';
 
+
+
+const INITIAL_VALUE_OBJECTS: ValueObjectPreset[] = [
+  {
+    name: 'Money',
+    description: '金額(amount)は0以上の正の数。ただし通貨(currency)が\'JPY\'の場合は正の整数のみ許容し、\'USD\'の場合は小数点以下2桁まで許容する。',
+    properties: [
+      { name: 'amount', type: 'DECIMAL', description: '金額数値' },
+      { name: 'currency', type: 'VARCHAR(255)', description: '通貨コード' }
+    ]
+  },
+  {
+    name: 'Address',
+    description: '郵便番号(postalCode)は7桁ハイフンなしの数字。都道府県(state)は47都道府県名であること。',
+    properties: [
+      { name: 'postalCode', type: 'VARCHAR(255)', description: '郵便番号' },
+      { name: 'state', type: 'VARCHAR(255)', description: '都道府県' },
+      { name: 'city', type: 'VARCHAR(255)', description: '市区町村' },
+      { name: 'line1', type: 'VARCHAR(255)', description: '住所番地' }
+    ]
+  }
+];
+
 export {
   DATA_TYPES,
   ATTRIBUTE_TYPES,
@@ -40,5 +63,6 @@ export {
   INITIAL_RELATIONSHIPS,
   INITIAL_CRUD_FUNCTIONS,
   INITIAL_CRUD_DATA,
-  STORAGE_KEY
+  STORAGE_KEY,
+  INITIAL_VALUE_OBJECTS
 };

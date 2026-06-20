@@ -88,6 +88,18 @@ export const AI_PROMPT_DERIVATION_ROLE = (tableName: string): string =>
     `You are a database calculation assistant.\nYour task is to calculate and fill in the values for the derived (dependent) columns of the table '${tableName}'.\n`;
 
 /**
+ * 導出項目計算における自己検算とChain of Thoughtを促す共通指示
+ */
+export const AI_PROMPT_DERIVATION_VERIFICATION_RULES = `
+- **Explain Calculation Steps (Chain of Thought)**: BEFORE outputting the final JSON block, you MUST write down a step-by-step mathematical explanation of how you computed the derived columns for each row in a human-readable text section. For example:
+  * "Table: [TableName], Column: [ColumnName]"
+  * "Row 1 (Date: 2026-05-08): Starting balance 43800 - Expense 4500 = 39300."
+  * "Row 2 (Date: 2026-05-10): Prior balance 39300 + Transfer 20000 = 59300."
+  * "Row 3 (Date: 2026-05-15): Prior balance 59300 - Expense 1500 = 57800."
+- **Self-Verification (CRITICAL)**: After writing down the calculation steps, double-check that every mathematical calculation is 100% correct, and that you have strictly respected the chronological order of transactions (do NOT include future transactions in the running total for a past row). Check the polarities (plus/minus) for all transfer records (e.g., transfer to a target account is a PLUS, transfer from a target account is a MINUS). Once verified, output the final, corrected JSON dataset inside a \`\`\`json ... \`\`\` block.
+`;
+
+/**
  * 第2段階の計算に関するルール
  */
 export const AI_PROMPT_DERIVATION_RULES = `
@@ -99,4 +111,7 @@ export const AI_PROMPT_DERIVATION_RULES = `
 5. **Schema and row integrity**: You MUST return the EXACT same number of rows (with the same 'id' and other existing column values). Do NOT add, delete, or reorder any rows. Only populate the derived/dependent columns.
 6. **Handle sequential carry-over (accumulation)**: If a derived column formula references a previous period, previous row, or cumulative value (e.g., '前月の...', '前行 of...', '繰越金', '累積'), evaluate the rows sequentially in the exact order they are presented. The input rows have been pre-sorted by the specified logical order to ensure correctness. Carry over the calculated values sequentially from top to bottom.
 7. **Double-check Arithmetic Calculations (CRITICAL)**: For complex running totals, accumulations, additions, or subtractions (e.g., calculating '口座残高', '振替元残高', '振替先残高'), you MUST double-check your math. Show extra care not to miss any transaction rows that occurred on or before the current row's timestamp. Perform the addition and subtraction step-by-step to prevent calculation errors.
+
+### Verification and Output Process (CRITICAL):
+${AI_PROMPT_DERIVATION_VERIFICATION_RULES}
 `;

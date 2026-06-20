@@ -78,3 +78,32 @@ export const syncRelationshipsWithTables = (
   
   return Array.from(relMap.values());
 };
+
+/**
+ * 全テーブルのカラム関係から値オブジェクト親カラムのIDセットを抽出し、
+ * 既存のリレーションのマッピング（mappings）からそれらのカラムIDを除外して返します。
+ */
+export const cleanRelationshipsForValueObjects = (
+  tables: Table[],
+  relationships: Relationship[]
+): Relationship[] => {
+  const allParentColIds = new Set<string>();
+  tables.forEach(t => {
+    t.columns.forEach(c => {
+      if (c.parentColumnId) {
+        allParentColIds.add(c.parentColumnId);
+      }
+    });
+  });
+
+  return relationships.map(rel => {
+    if (rel.mappings) {
+      return {
+        ...rel,
+        mappings: rel.mappings.filter(m => !allParentColIds.has(m.childColId))
+      };
+    }
+    return rel;
+  });
+};
+

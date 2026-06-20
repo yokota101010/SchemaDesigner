@@ -8,6 +8,9 @@ export const buildSingleTableResponseSchema = (table: Table, parentData: Record<
     const tableUqs = table.uniqueKeys || [];
     
     table.columns.forEach(col => {
+        const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+        if (isVoParent) return;
+
         if (!includeDependent && col.attributeType === 'dependent' && !col.isFirstPhaseCalculable) return;
 
         let desc = `Value for column '${col.name}' (${col.type})`;
@@ -38,6 +41,9 @@ export const buildSingleTableResponseSchema = (table: Table, parentData: Record<
 
     const requiredCols = table.columns
         .filter(col => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+            if (isVoParent) return false;
+
             if (!includeDependent && col.attributeType === 'dependent' && !col.isFirstPhaseCalculable) return false;
             return col.isPk || col.isFk || col.attributeType === 'dependent';
         })
@@ -66,6 +72,9 @@ export const buildSingleTableResponseSchema = (table: Table, parentData: Record<
 export const buildSingleTableDerivationSchema = (table: Table, allGeneratedData: Record<string, any[]> = {}): any => {
     const columnProps: Record<string, any> = {};
     table.columns.forEach(col => {
+        const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+        if (isVoParent) return;
+
         let desc = `Value for column '${col.name}' (${col.type})`;
         if (col.isFk) {
             const parentTableId = col.reference?.tableId;
@@ -96,7 +105,7 @@ export const buildSingleTableDerivationSchema = (table: Table, allGeneratedData:
                 items: {
                     type: 'object',
                     properties: columnProps,
-                    required: table.columns.map(col => col.id)
+                    required: table.columns.filter(col => !table.columns.some(x => x.parentColumnId === col.id)).map(col => col.id)
                 }
             }
         },
@@ -114,6 +123,9 @@ export const buildInitialValueParsingSchema = (tables: Table[]): any => {
         const columnProps: Record<string, any> = {};
         
         table.columns.forEach(col => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+            if (isVoParent) return;
+
             columnProps[col.id] = {
                 type: 'string',
                 description: `Value for column '${col.name}' (${col.type}). PK: ${col.isPk}, FK: ${col.isFk}`
@@ -153,6 +165,9 @@ export const buildAllTablesResponseSchema = (tables: Table[]): any => {
         const columnProps: Record<string, any> = {};
         
         table.columns.forEach(col => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+            if (isVoParent) return;
+
             if (col.attributeType === 'dependent') return;
 
             let desc = `Value for column '${col.name}' (${col.type})`;
@@ -171,6 +186,9 @@ export const buildAllTablesResponseSchema = (tables: Table[]): any => {
 
         const requiredCols = table.columns
             .filter(col => {
+                const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+                if (isVoParent) return false;
+
                 if (col.attributeType === 'dependent') return false;
                 return col.isPk || col.isFk;
             })
@@ -204,6 +222,9 @@ export const buildAllTablesDerivationSchema = (tables: Table[]): any => {
         const columnProps: Record<string, any> = {};
         
         table.columns.forEach(col => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+            if (isVoParent) return;
+
             let desc = `Value for column '${col.name}' (${col.type})`;
             if (col.attributeType === 'dependent') {
                 desc += ` [Derived using formula: ${col.derivation || ''}]`;
@@ -225,7 +246,7 @@ export const buildAllTablesDerivationSchema = (tables: Table[]): any => {
             items: {
                 type: 'object',
                 properties: columnProps,
-                required: table.columns.map(col => col.id)
+                required: table.columns.filter(col => !table.columns.some(x => x.parentColumnId === col.id)).map(col => col.id)
             }
         };
     });

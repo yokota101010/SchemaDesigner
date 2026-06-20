@@ -3,7 +3,7 @@
  */
 import { buildSingleTableResponseSchema, buildSingleTableDerivationSchema, buildInitialValueParsingSchema, buildAllTablesResponseSchema, buildAllTablesDerivationSchema } from './aiSchemaBuilder';
 import { buildSingleTablePrompt, buildSingleTableDerivationPrompt, buildInitialValueParsingPrompt, buildAllTablesPrompt, buildAllTablesDerivationPrompt } from './aiPromptBuilder';
-import { Table, Relationship } from '../types';
+import { Table, Relationship, ValueObjectPreset } from '../types';
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
@@ -240,9 +240,10 @@ const generateSingleTableData = async (
   apiKey: string, 
   rowCount: number, 
   otherInstructions = '', 
-  includeDependent = false
+  includeDependent = false,
+  valueObjects: ValueObjectPreset[] = []
 ): Promise<any[]> => {
-    const prompt = buildSingleTablePrompt(table, relationships, parentData, rowCount, otherInstructions, includeDependent);
+    const prompt = buildSingleTablePrompt(table, relationships, parentData, rowCount, otherInstructions, includeDependent, valueObjects);
     const responseSchema = buildSingleTableResponseSchema(table, parentData, includeDependent);
 
     // REST API エンドポイント (Gemini 2.5 Flash-Lite モデルを使用)
@@ -310,9 +311,10 @@ const generateAllTablesData = async (
   parentData: Record<string, any[]>, 
   apiKey: string, 
   rowCount: number, 
-  otherInstructions = ''
+  otherInstructions = '',
+  valueObjects: ValueObjectPreset[] = []
 ): Promise<any> => {
-    const prompt = buildAllTablesPrompt(tables, relationships, parentData, rowCount, otherInstructions);
+    const prompt = buildAllTablesPrompt(tables, relationships, parentData, rowCount, otherInstructions, valueObjects);
     const responseSchema = buildAllTablesResponseSchema(tables);
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
@@ -410,7 +412,8 @@ export const generateMockDataWithAI = async (
   apiKey: string, 
   rowCount = 3, 
   initialInstructions = '', 
-  otherInstructions = ''
+  otherInstructions = '',
+  valueObjects: ValueObjectPreset[] = []
 ): Promise<Record<string, any[]>> => {
     if (!apiKey) {
         throw new Error("APIキーが設定されていません。");
@@ -453,7 +456,7 @@ export const generateMockDataWithAI = async (
             await new Promise(resolve => setTimeout(resolve, 5000));
         }
 
-        const generatedData = await generateAllTablesData(tables, relationships, allGeneratedData, apiKey, rowCount, otherInstructions);
+        const generatedData = await generateAllTablesData(tables, relationships, allGeneratedData, apiKey, rowCount, otherInstructions, valueObjects);
 
         // 生成された各テーブルのデータをマージする
         tables.forEach(table => {
@@ -479,7 +482,7 @@ export const generateMockDataWithAI = async (
             });
 
             // 導出カラムの初期値（空文字列）を設定する
-            const dependentCols = table.columns.filter(c => c.attributeType === 'dependent');
+            const dependentCols = table.columns.filter(c => c.attributeType === 'dependent' && !table.columns.some(x => x.parentColumnId === c.id));
             allGeneratedData[table.id] = finalRows.map(row => {
                 const updatedRow = { ...row };
                 dependentCols.forEach(col => {
@@ -509,7 +512,7 @@ export const generateMockDataWithAI = async (
         tables.forEach(table => {
             const calculatedRows = calculatedData[table.id] || [];
             const currentTableData = allGeneratedData[table.id] || [];
-            const pkCols = table.columns.filter(col => col.isPk && col.attributeType !== 'dependent');
+            const pkCols = table.columns.filter(col => col.isPk && col.attributeType !== 'dependent' && !table.columns.some(x => x.parentColumnId === col.id));
 
             allGeneratedData[table.id] = currentTableData.map((row, idx) => {
                 let match = null;

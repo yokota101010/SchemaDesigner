@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { DEFAULT_PROJECT_NAME, INITIAL_TABLES, INITIAL_RELATIONSHIPS, INITIAL_CRUD_FUNCTIONS, INITIAL_CRUD_DATA } from './constants';
+import { DEFAULT_PROJECT_NAME, INITIAL_TABLES, INITIAL_RELATIONSHIPS, INITIAL_CRUD_FUNCTIONS, INITIAL_CRUD_DATA, INITIAL_VALUE_OBJECTS } from './constants';
 
 import { useSchemaState } from './hooks/useSchemaState';
 import { useCrudState } from './hooks/useCrudState';
@@ -19,6 +19,7 @@ import { AiSettingsModal } from './components/modals/AiSettingsModal';
 import { AiLoadingModal } from './components/modals/AiLoadingModal';
 import { AiGeneratePromptModal } from './components/modals/AiGeneratePromptModal';
 import { generateMockDataWithAI } from './utils/aiDataGenerator';
+import { ValueObjectSettingsModal } from './components/modals/ValueObjectSettingsModal';
 
 import { Table, Relationship } from './types';
 
@@ -27,7 +28,9 @@ function SchemaDesigner() {
   const [aiInstructions, setAiInstructions] = useState<string>("");
 
   const [showAiSettingsModal, setShowAiSettingsModal] = useState<boolean>(false);
+  const [showValueObjectSettingsModal, setShowValueObjectSettingsModal] = useState<boolean>(false);
   const [showAiLoadingModal, setShowAiLoadingModal] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'main' | 'sub'>('main');
   const [showAiGeneratePromptModal, setShowAiGeneratePromptModal] = useState<boolean>(false);
   const [aiInitialInstructions, setAiInitialInstructions] = useState<string>(() => {
       return localStorage.getItem('schema-designer-ai-initial-instructions') || '';
@@ -41,7 +44,11 @@ function SchemaDesigner() {
   const [showPromptModal, setShowPromptModal] = useState<boolean>(false);
   const [generatedSql, setGeneratedSql] = useState<string>('');
 
-  const [viewOffset, setViewOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [mainViewOffset, setMainViewOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [subViewOffset, setSubViewOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const viewOffset = activeTab === 'main' ? mainViewOffset : subViewOffset;
+  const setViewOffset = activeTab === 'main' ? setMainViewOffset : setSubViewOffset;
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [confirmation, setConfirmation] = useState<any>(null);
   
@@ -62,10 +69,11 @@ function SchemaDesigner() {
   const schemaState = useSchemaState(viewOffset, requestConfirmation);
   const {
       tables, setTables, relationships, setRelationships,
+      valueObjects, setValueObjects, updateValueObjects,
       editingTableId, setEditingTableId, connectionMode, setConnectionMode,
       selectedRelId, setSelectedRelId, autoUpdateRelationshipType,
       addTable, deleteTable, initiateDeleteTable, updateTableName, updateTableOrderBy,
-      toggleTableMinimize, addColumn, deleteColumn, updateColumn,
+      toggleTableMinimize, updateTableViewPane, alignSubTables, addColumn, deleteColumn, updateColumn,
       updateColumnReference, moveColumn, addRow, deleteRow, updateRowValue,
       startConnectionMode, handleConnect, deleteRelationship,
       addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol,
@@ -112,11 +120,12 @@ function SchemaDesigner() {
   const loadDemoData = useCallback(() => {
       setTables(INITIAL_TABLES);
       setRelationships(INITIAL_RELATIONSHIPS);
+      setValueObjects(INITIAL_VALUE_OBJECTS);
       setCrudFunctions(INITIAL_CRUD_FUNCTIONS);
       setCrudData(INITIAL_CRUD_DATA);
       setAiInstructions("");
       setProjectName(DEFAULT_PROJECT_NAME);
-  }, [setTables, setRelationships, setCrudFunctions, setCrudData]);
+  }, [setTables, setRelationships, setValueObjects, setCrudFunctions, setCrudData]);
 
   useEffect(() => {
     try {
@@ -132,10 +141,12 @@ function SchemaDesigner() {
             setTables(cleanedTables);
             
             setRelationships(parsed.relationships || []);
+            setValueObjects(parsed.valueObjects || INITIAL_VALUE_OBJECTS);
             setCrudFunctions(parsed.crudFunctions || []);
             setCrudData(parsed.crudData || {});
             setAiInstructions(parsed.aiInstructions || "");
-            setViewOffset({ x: 0, y: 0 });
+            setMainViewOffset({ x: 0, y: 0 });
+            setSubViewOffset({ x: 0, y: 0 });
         } else {
             loadDemoData();
         }
@@ -144,7 +155,7 @@ function SchemaDesigner() {
         loadDemoData();
     }
     setIsLoading(false);
-  }, [loadDemoData, setTables, setRelationships, setCrudFunctions, setCrudData]);
+  }, [loadDemoData, setTables, setRelationships, setValueObjects, setCrudFunctions, setCrudData]);
 
   useEffect(() => {
       if (isLoading) return;
@@ -158,13 +169,14 @@ function SchemaDesigner() {
         name: projectName,
         tables: cleanedTables,
         relationships,
+        valueObjects,
         crudFunctions,
         crudData,
         aiInstructions,
         updatedAt: new Date().toISOString()
       };
       localStorage.setItem('schema-designer-autosave-v1', JSON.stringify(saveData));
-  }, [projectName, tables, relationships, crudFunctions, crudData, aiInstructions, isLoading]);
+  }, [projectName, tables, relationships, valueObjects, crudFunctions, crudData, aiInstructions, isLoading]);
 
   const handleAiGenerateData = () => {
       const apiKey = localStorage.getItem('schema-designer-gemini-apikey');
@@ -187,7 +199,7 @@ function SchemaDesigner() {
 
       setShowAiLoadingModal(true);
       try {
-          const generatedData = await generateMockDataWithAI(tables, relationships, apiKey, 3, aiInitialInstructions, aiOtherInstructions);
+          const generatedData = await generateMockDataWithAI(tables, relationships, apiKey, 3, aiInitialInstructions, aiOtherInstructions, valueObjects);
           
           setTables(prevTables => {
               return prevTables.map(table => {
@@ -227,7 +239,8 @@ function SchemaDesigner() {
             setCrudFunctions([]);
             setCrudData({});
             setAiInstructions("");
-            setViewOffset({ x: 0, y: 0 });
+            setMainViewOffset({ x: 0, y: 0 });
+            setSubViewOffset({ x: 0, y: 0 });
           },
           true
       );
@@ -245,6 +258,7 @@ function SchemaDesigner() {
       name: projectName,
       tables: cleanedTables,
       relationships,
+      valueObjects,
       crudFunctions,
       crudData,
       aiInstructions,
@@ -321,10 +335,12 @@ function SchemaDesigner() {
                 setTables(cleanedTables);
 
                 setRelationships(json.relationships);
+                setValueObjects(json.valueObjects || INITIAL_VALUE_OBJECTS);
                 setCrudFunctions(json.crudFunctions || []);
                 setCrudData(json.crudData || {});
                 setAiInstructions(json.aiInstructions || "");
-                setViewOffset({ x: 0, y: 0 });
+                setMainViewOffset({ x: 0, y: 0 });
+                setSubViewOffset({ x: 0, y: 0 });
             },
             true
         );
@@ -345,7 +361,7 @@ function SchemaDesigner() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tables, relationships, projectName, crudFunctions, crudData, aiInstructions]);
+  }, [tables, relationships, valueObjects, projectName, crudFunctions, crudData, aiInstructions]);
 
   useEffect(() => {
     const onDragMove = (e: any) => dragState.handleDragMove(e, canvasRef);
@@ -385,6 +401,7 @@ function SchemaDesigner() {
         setShowPromptModal={setShowPromptModal} setShowCrudModal={setShowCrudModal}
         addTable={() => addTable(canvasRef)} generateSQL={generateSQL} setShowHelpModal={setShowHelpModal}
         onAiGenerateData={handleAiGenerateData} onOpenAiSettings={() => setShowAiSettingsModal(true)}
+        onOpenValueObjectSettings={() => setShowValueObjectSettingsModal(true)}
       />
       
       <Canvas 
@@ -403,6 +420,9 @@ function SchemaDesigner() {
         toggleTableMinimize={toggleTableMinimize}
         updateRowValue={updateRowValue}
         deleteRow={deleteRow}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onAlignSubTables={alignSubTables}
       />
 
       <PromptModal showPromptModal={showPromptModal} setShowPromptModal={setShowPromptModal} aiInstructions={aiInstructions} setAiInstructions={setAiInstructions} />
@@ -420,6 +440,7 @@ function SchemaDesigner() {
       
       <TableEditorModal 
         editingTable={editingTable} tables={tables} 
+        valueObjects={valueObjects}
         initiateDeleteTable={initiateDeleteTable} updateTableName={updateTableName} 
         updateTableOrderBy={updateTableOrderBy}
         addColumn={addColumn} updateColumn={updateColumn} 
@@ -428,6 +449,7 @@ function SchemaDesigner() {
         addFkRelationship={addFkRelationship} updateFkRelationshipParent={updateFkRelationshipParent}
         toggleFkMapping={toggleFkMapping} updateFkMappingParentCol={updateFkMappingParentCol}
         addUniqueKey={addUniqueKey} deleteUniqueKey={deleteUniqueKey} toggleUniqueKeyMapping={toggleUniqueKeyMapping}
+        updateTableViewPane={updateTableViewPane}
         onComplete={handleCompleteEdit}
         onCancel={handleCancelEdit}
       />
@@ -444,6 +466,14 @@ function SchemaDesigner() {
         onGenerate={handleExecuteAiGenerateData} 
       />
       
+      <ValueObjectSettingsModal 
+        showModal={showValueObjectSettingsModal} 
+        setShowModal={setShowValueObjectSettingsModal} 
+        valueObjects={valueObjects} 
+        tables={tables}
+        onSave={updateValueObjects} 
+      />
+
       <ConfirmModal confirmation={confirmation} setConfirmation={setConfirmation} handleConfirmAction={handleConfirmAction} />
     </div>
   );
