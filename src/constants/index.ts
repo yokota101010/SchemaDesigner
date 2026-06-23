@@ -1,4 +1,4 @@
-import { Relationship, Table, ValueObjectPreset, ValueObjectPropertyPreset, Aggregate, AggregateData } from '../types';
+import { Relationship, Table, ValueObjectPreset, ValueObjectPropertyPreset, Aggregate, AggregateData } from '../domain/models';
 
 /**
  * データ型定義

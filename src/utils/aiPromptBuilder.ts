@@ -1,4 +1,4 @@
-import { Table, Relationship, ValueObjectPreset, Column } from '../types';
+import { Table, Relationship, ValueObjectPreset, Column } from '../domain/models';
 import { INITIAL_VALUE_OBJECTS } from '../constants';
 import { 
     AI_PROMPT_SYSTEM_ROLE,

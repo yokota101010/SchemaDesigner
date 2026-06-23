@@ -1,4 +1,4 @@
-import { Table } from '../types';
+import { Table } from '../domain/models';
 
 /**
  * 単一のテーブル定義に基づいて Gemini API 用の動的 JSON Schema を構築する (第1段階用)

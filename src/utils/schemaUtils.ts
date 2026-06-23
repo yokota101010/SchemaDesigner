@@ -1,4 +1,4 @@
-import { Table, Column } from '../types';
+import { Table, Column } from '../domain/models';
 
 /**
  * FK参照などのデータ型から、実際の物理データ型を再帰的に解決する
