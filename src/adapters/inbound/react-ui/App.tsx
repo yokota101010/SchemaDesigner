@@ -16,6 +16,7 @@ import { AiGeneratePromptModal } from './components/modals/AiGeneratePromptModal
 import { ValueObjectSettingsModal } from './components/modals/ValueObjectSettingsModal';
 
 import { Table, Relationship } from '../../../domain/models';
+import { generateMarkdown } from '../../../utils/markdownGenerator';
 
 import { ProjectRepository } from '../../../ports/outbound/ProjectRepository';
 import { FileExporter } from '../../../ports/outbound/FileExporter';
@@ -348,8 +349,8 @@ function SchemaDesigner() {
       );
   };
 
-  const handleExportJSON = async () => {
-    const defaultName = `${projectName.replace(/\s+/g, '_')}_schema.json`;
+  const handleExportMarkdown = async () => {
+    const defaultName = 'spec.md';
 
     const cleanedTables = tables.map(t => ({
       ...t,
@@ -367,10 +368,10 @@ function SchemaDesigner() {
       version: "1.3", 
       exportedAt: new Date().toISOString()
     };
-    const jsonString = JSON.stringify(projectData, null, 2);
+    const mdString = generateMarkdown(projectData);
 
     try {
-        await fileExporter.exportJson(defaultName, jsonString);
+        await fileExporter.exportFile(defaultName, mdString, 'text/markdown', 'md');
     } catch (error: any) {
         alert(error.message || "ファイルの保存に失敗しました。");
     }
@@ -390,10 +391,18 @@ function SchemaDesigner() {
     const reader = new FileReader();
     reader.onload = (event: any) => {
       try {
-        const json = JSON.parse(event.target.result);
+        const text = event.target.result;
+        const match = text.match(/SCHEMA_DESIGNER_METADATA_START([\s\S]*?)SCHEMA_DESIGNER_METADATA_END/);
+        
+        if (!match) {
+          alert('無効なファイル形式です。メタデータが見つかりませんでした。');
+          return;
+        }
+
+        const json = JSON.parse(match[1].trim());
         
         if (!Array.isArray(json.tables) || !Array.isArray(json.relationships)) {
-          alert('無効なファイル形式です。');
+          alert('メタデータ内のスキーマ情報が無効です。');
           return;
         }
 
@@ -431,7 +440,7 @@ function SchemaDesigner() {
     const handleKeyDown = (e: KeyboardEvent) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
             e.preventDefault();
-            handleExportJSON();
+            handleExportMarkdown();
         }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -468,7 +477,7 @@ function SchemaDesigner() {
       <Header 
         projectName={projectName} setProjectName={setProjectName}
         handleNewProject={handleNewProject} handleImportClick={handleImportClick}
-        handleExportJSON={handleExportJSON} fileInputRef={fileInputRef} handleFileChange={handleFileChange}
+        handleExportMarkdown={handleExportMarkdown} fileInputRef={fileInputRef} handleFileChange={handleFileChange}
         onOpenAggregateModal={handleOpenAggregateModal}
         addTable={() => addTable(canvasRef)}
         onAiGenerateData={handleAiGenerateData} onOpenAiSettings={() => setShowAiSettingsModal(true)}

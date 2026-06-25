@@ -1,28 +1,28 @@
 import { FileExporter } from '../../ports/outbound/FileExporter';
 
 export class BrowserFileExporter implements FileExporter {
-  async exportJson(filename: string, jsonString: string): Promise<void> {
+  async exportFile(filename: string, content: string, mimeType: string, extension: string): Promise<void> {
     try {
       if ((window as any).showSaveFilePicker) {
         const handle = await (window as any).showSaveFilePicker({
           suggestedName: filename,
           types: [{
-            description: 'JSON File',
-            accept: { 'application/json': ['.json'] },
+            description: `${extension.toUpperCase()} File`,
+            accept: { [mimeType]: [`.${extension}`] },
           }],
         });
         const writable = await handle.createWritable();
-        await writable.write(jsonString);
+        await writable.write(content);
         await writable.close();
       } else {
         const fileName = window.prompt("保存するファイル名を入力してください", filename);
         if (!fileName) return;
 
-        const blob = new Blob([jsonString], { type: 'application/json' });
+        const blob = new Blob([content], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = fileName.endsWith('.json') ? fileName : `${fileName}.json`;
+        link.download = fileName.endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

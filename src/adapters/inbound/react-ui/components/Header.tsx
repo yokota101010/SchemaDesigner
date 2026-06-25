@@ -6,7 +6,7 @@ interface HeaderProps {
     setProjectName: (name: string) => void;
     handleNewProject: () => void;
     handleImportClick: () => void;
-    handleExportJSON: () => void;
+    handleExportMarkdown: () => void;
     fileInputRef: React.RefObject<HTMLInputElement | null>;
     handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onOpenAggregateModal: () => void;
@@ -17,7 +17,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
-    projectName, setProjectName, handleNewProject, handleImportClick, handleExportJSON, fileInputRef, handleFileChange,
+    projectName, setProjectName, handleNewProject, handleImportClick, handleExportMarkdown, fileInputRef, handleFileChange,
     onOpenAggregateModal, addTable,
     onAiGenerateData, onOpenAiSettings, onOpenValueObjectSettings
 }) => {
@@ -53,14 +53,14 @@ export const Header: React.FC<HeaderProps> = ({
                     <button 
                         onClick={handleImportClick}
                         className="p-1.5 hover:bg-white rounded text-gray-600 transition-colors"
-                        title="JSON読込 (ローカル)"
+                        title="仕様書読込 (.md)"
                     >
                         <FileUp className="w-4 h-4" />
                     </button>
                     <button 
-                        onClick={handleExportJSON}
+                        onClick={handleExportMarkdown}
                         className="p-1.5 hover:bg-white rounded text-gray-600 transition-colors"
-                        title="JSON保存 (ローカル)"
+                        title="仕様書保存 (.md)"
                     >
                         <FileDown className="w-4 h-4" />
                     </button>
@@ -69,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
                         type="file" 
                         ref={fileInputRef}
                         onChange={handleFileChange}
-                        accept=".json"
+                        accept=".md"
                         className="hidden"
                     />
                 </div>

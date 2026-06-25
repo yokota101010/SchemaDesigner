@@ -1,3 +1,3 @@
 export interface FileExporter {
-  exportJson(filename: string, jsonString: string): Promise<void>;
+  exportFile(filename: string, content: string, mimeType: string, extension: string): Promise<void>;
 }
