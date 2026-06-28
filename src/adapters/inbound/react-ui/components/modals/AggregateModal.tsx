@@ -206,14 +206,16 @@ export const AggregateModal: React.FC<AggregateModalProps> = ({
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
                                                                     if (val !== "") {
-                                                                        // デフォルトロールは Member (M) にする
-                                                                        const existingRole = currentAssignment?.role || 'M';
-                                                                        assignTableToAggregate(table.id, val, existingRole, tables);
+                                                                        // 新しい集約に所属させる、または別の集約に変更する場合は、デフォルトで 'M' (Member) として割り当てる
+                                                                        assignTableToAggregate(table.id, val, 'M', tables);
+                                                                    } else {
+                                                                        // 未所属にする
+                                                                        removeTableFromAggregate(table.id);
                                                                     }
                                                                 }}
                                                                 className="w-full bg-white border border-gray-300 rounded px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-xs text-gray-700 transition-all shadow-sm"
                                                             >
-                                                                {!currentAssignment?.aggregateId && <option value="">(未所属)</option>}
+                                                                <option value="">(未所属)</option>
                                                                 {aggregates.map(agg => (
                                                                     <option key={agg.id} value={agg.id}>{agg.name}</option>
                                                                 ))}

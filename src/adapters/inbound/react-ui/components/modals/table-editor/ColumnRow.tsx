@@ -162,7 +162,7 @@ export const ColumnRow: React.FC<ColumnRowProps> = ({
                                 columnId: col.id,
                                 columnName: col.name,
                                 field: 'description',
-                                title: '説明 (AIへの指示)',
+                                title: '説明',
                                 value: col.description || ''
                             })}
                             className="absolute right-1.5 text-gray-400 hover:text-blue-500 opacity-0 group-hover/input:opacity-100 focus:opacity-100 transition-opacity p-0.5 cursor-pointer"

@@ -178,7 +178,7 @@ export const TableEditorModal: React.FC<TableEditorModalProps> = ({
                                         <th className="px-3 py-2" style={{ width: '180px', minWidth: '180px' }}>カラム名</th>
                                         <th className="px-3 py-2" style={{ width: '130px', minWidth: '130px' }}>データ型</th>
                                         <th className="px-3 py-2" style={{ width: '110px', minWidth: '110px' }}>区分</th>
-                                        <th className="px-3 py-2" style={{ width: '160px', minWidth: '160px' }}>説明 (AIへの指示)</th>
+                                        <th className="px-3 py-2" style={{ width: '160px', minWidth: '160px' }}>説明</th>
                                         {hasDependentColumn && (
                                             <th className="px-3 py-2" style={{ width: '180px', minWidth: '180px' }}>詳細設定 (導出)</th>
                                         )}

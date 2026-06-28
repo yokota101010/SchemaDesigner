@@ -70,10 +70,13 @@ function SchemaDesigner() {
   }, []);
 
   const handleConfirmAction = () => {
-      if (confirmation && confirmation.onConfirm) {
-          confirmation.onConfirm();
+      if (confirmation) {
+          const { onConfirm } = confirmation;
+          setConfirmation(null);
+          if (onConfirm) {
+              onConfirm();
+          }
       }
-      setConfirmation(null);
   };
 
   const schemaState = useSchemaState(viewOffset, requestConfirmation, schemaUseCase);
