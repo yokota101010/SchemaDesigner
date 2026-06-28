@@ -2,7 +2,36 @@
 
 > [!NOTE]
 > この仕様書は DB Architect (Schema Designer) から自動出力されました。
-> 出力日時: 2026/6/20 22:19:28
+> 出力日時: 2026/6/26 21:57:24
+
+## 1. ドメイン集約 (Domain Aggregates)
+
+トランザクションの整合性を保つ境界となる集約の定義です。
+
+### 集約: 費目
+- 👑 **集約ルート (Aggregate Root)**: `費目`
+
+### 集約: 月次収支取引サマリ
+- 👑 **集約ルート (Aggregate Root)**: `月次収支取引サマリ`
+
+### 集約: 収支取引属性
+- (所属するテーブルはありません)
+
+### 集約: 月次取引サマリ
+- 👑 **集約ルート (Aggregate Root)**: `月次取引サマリ`
+
+### 集約: 残高口座
+- 👑 **集約ルート (Aggregate Root)**: `残高口座`
+
+### 集約: 月次残高
+- 👑 **集約ルート (Aggregate Root)**: `月次残高`
+
+### 集約: 振替取引属性
+- (所属するテーブルはありません)
+
+### 集約: 家計取引明細
+- 👑 **集約ルート (Aggregate Root)**: `家計取引明細`
+- 🔗 **集約メンバー (Members)**: `収支取引属性`, `振替取引属性`
 
 ## 2. 値オブジェクト定義 (Value Objects)
 
@@ -1897,11 +1926,86 @@ SCHEMA_DESIGNER_METADATA_START
       ]
     }
   ],
-  "crudFunctions": [],
-  "crudData": {},
-  "aiInstructions": "",
+  "aggregates": [
+    {
+      "id": "agg_auto_1782427954504_zdncofx49",
+      "name": "費目"
+    },
+    {
+      "id": "agg_auto_1782427954504_vyusy02si",
+      "name": "月次収支取引サマリ"
+    },
+    {
+      "id": "agg_auto_1782427954504_pgxnjskjv",
+      "name": "収支取引属性"
+    },
+    {
+      "id": "agg_auto_1782427954504_hupf6wc56",
+      "name": "月次取引サマリ"
+    },
+    {
+      "id": "agg_auto_1782427954504_19v971uws",
+      "name": "残高口座"
+    },
+    {
+      "id": "agg_auto_1782427954504_r5w8ylkl1",
+      "name": "月次残高"
+    },
+    {
+      "id": "agg_auto_1782427954504_s8q15t9kz",
+      "name": "振替取引属性"
+    },
+    {
+      "id": "agg_auto_1782427954504_l53ft1hy6",
+      "name": "家計取引明細"
+    }
+  ],
+  "aggregateData": {
+    "table_1780214186481": {
+      "aggregateId": "agg_auto_1782427954504_zdncofx49",
+      "role": "R"
+    },
+    "table_1780214349756": {
+      "aggregateId": "agg_auto_1782427954504_vyusy02si",
+      "role": "R"
+    },
+    "table_1780214495778": {
+      "aggregateId": "agg_auto_1782427954504_l53ft1hy6",
+      "role": "M"
+    },
+    "table_1780744591850": {
+      "aggregateId": "agg_auto_1782427954504_hupf6wc56",
+      "role": "R"
+    },
+    "table_1781289866863": {
+      "aggregateId": "agg_auto_1782427954504_19v971uws",
+      "role": "R"
+    },
+    "table_1781290043396": {
+      "aggregateId": "agg_auto_1782427954504_r5w8ylkl1",
+      "role": "R"
+    },
+    "table_1781294882069": {
+      "aggregateId": "agg_auto_1782427954504_l53ft1hy6",
+      "role": "M"
+    },
+    "table_1781295066069": {
+      "aggregateId": "agg_auto_1782427954504_l53ft1hy6",
+      "role": "R"
+    }
+  },
+  "aggregateTableOrder": [
+    "table_1780214186481",
+    "table_1780214349756",
+    "table_1780744591850",
+    "table_1781289866863",
+    "table_1781290043396",
+    "table_1781295066069",
+    "table_1780214495778",
+    "table_1781294882069"
+  ],
   "version": "1.3",
-  "exportedAt": "2026-06-20T13:19:28.788Z"
+  "exportedAt": "2026-06-26T12:57:24.821Z"
 }
 SCHEMA_DESIGNER_METADATA_END
 -->
