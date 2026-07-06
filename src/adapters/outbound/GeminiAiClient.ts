@@ -2,6 +2,7 @@ import { AiClient } from '../../ports/outbound/AiClient';
 import { Table, Relationship, ValueObjectPreset } from '../../domain/models';
 import { buildSingleTableResponseSchema, buildSingleTableDerivationSchema, buildInitialValueParsingSchema, buildAllTablesResponseSchema, buildAllTablesDerivationSchema } from '../../utils/aiSchemaBuilder';
 import { buildSingleTablePrompt, buildSingleTableDerivationPrompt, buildInitialValueParsingPrompt, buildAllTablesPrompt, buildAllTablesDerivationPrompt } from '../../utils/aiPromptBuilder';
+import { mergeMockRows } from '../../utils/mockDataMerger';
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
@@ -64,22 +65,7 @@ export class GeminiAiClient implements AiClient {
         const existingRows = allGeneratedData[table.id] || [];
         const pkCols = table.columns.filter(col => col.isPk);
 
-        const finalRows = [...existingRows];
-        generatedRows.forEach((newRow: any) => {
-          const isDuplicate = existingRows.some(exRow => {
-            if (pkCols.length === 0) return false;
-            return pkCols.every(pkCol => {
-              return exRow[pkCol.id] !== undefined && newRow[pkCol.id] !== undefined && String(exRow[pkCol.id]) === String(newRow[pkCol.id]);
-            });
-          });
-
-          if (!isDuplicate) {
-            finalRows.push({
-              id: `row_ai_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-              ...newRow
-            });
-          }
-        });
+        const finalRows = mergeMockRows(existingRows, generatedRows, pkCols);
 
         // 導出カラムの初期値（空文字列）を設定する
         const dependentCols = table.columns.filter(c => c.attributeType === 'dependent' && !table.columns.some(x => x.parentColumnId === c.id));

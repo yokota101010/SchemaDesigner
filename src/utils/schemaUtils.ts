@@ -38,3 +38,10 @@ export const getVisibleColumns = (table: Table): Column[] => {
     return true;
   });
 };
+
+/**
+ * テーブルがサブビュー（マスタテーブル等）であるか判定する
+ */
+export const isMasterTable = (table: Table): boolean => {
+  return table.viewPane === 'sub';
+};

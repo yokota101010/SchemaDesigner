@@ -12,7 +12,7 @@ import {
     AI_PROMPT_DERIVATION_RULES,
     AI_PROMPT_DERIVATION_VERIFICATION_RULES
 } from './aiPromptTemplates';
-import { resolveColumnType } from './schemaUtils';
+import { resolveColumnType, isMasterTable } from './schemaUtils';
 
 const getColumnTypeDescription = (col: Column, tables: Table[]): string => {
   if (col.type && col.type.startsWith('FK:')) {
@@ -383,7 +383,7 @@ export const buildAllTablesPrompt = (
         });
 
         const parentRows = parentData[table.id] || [];
-        const existingRows = parentRows.length > 0 ? parentRows : (table.rows || []);
+        const existingRows = isMasterTable(table) ? (table.rows || []) : parentRows;
 
         if (existingRows.length > 0) {
             const existingData = existingRows.map((row: any) => {
@@ -393,13 +393,13 @@ export const buildAllTablesPrompt = (
                 });
                 return cleanRow;
             });
-            if (table.viewPane === 'sub') {
+            if (isMasterTable(table)) {
                 prompt += `  * PRE-EXISTING INITIAL ROWS (This is a sub-view master table. You MUST preserve these rows exactly as they are in your output rows for this table. Do NOT modify them, and do NOT generate any additional rows for this table. Only return these rows): \n`;
             } else {
-                prompt += `  * PRE-EXISTING INITIAL ROWS (You MUST preserve these rows exactly as they are in your output rows for this table, do NOT modify them. generate ADDITIONAL rows starting after these): \n`;
+                prompt += `  * PRE-EXISTING INITIAL ROWS (You MUST preserve the specific values explicitly defined in these initial rows. However, you CAN update or fill in other columns in these rows, such as flags, statuses, or other unspecified fields, if requested by the user instructions. Generate ADDITIONAL rows starting after these): \n`;
             }
             prompt += `    ` + JSON.stringify(existingData) + '\n';
-        } else if (table.viewPane === 'sub') {
+        } else if (isMasterTable(table)) {
             prompt += `  * NOTE: This is a sub-view master table. It currently has no pre-existing rows. Do NOT generate any rows for this table.\n`;
         }
 
@@ -444,7 +444,7 @@ export const buildAllTablesPrompt = (
     }
 
     prompt += `\n### Mock Data Generation Rules:\n`;
-    prompt += `1. For each main-view table (tables not in sub-view), generate approximately ${rowCount} realistic rows (in addition to any pre-existing initial rows listed above) by default. However, complying with all database schemas, referential integrity constraints, uniqueness constraints, and evaluation/calculation rules is your HIGHEST PRIORITY. You MUST automatically increase the number of generated rows for any table if it is logically required to maintain consistent relationships, business logic, or evaluation chains (such as ensuring carry-over records exist for all active keys when a sequence/order-by key advances) across the database. Never compromise data integrity to fit the row count limit.\n`;
+    prompt += `1. If the user instructions specify specific generation rules, counts, or dates for a table, you MUST strictly follow them. For any main-view tables where the user does not specify generation rules, generate approximately ${rowCount} realistic rows (in addition to any pre-existing initial rows listed above) by default. Complying with database schemas, referential integrity constraints, uniqueness constraints, and evaluation/calculation rules remains your HIGHEST PRIORITY. You MUST automatically adjust the number of generated rows for any table if logically required to maintain consistent relationships or evaluation chains. Never compromise data integrity to fit default row limits.\n`;
     prompt += `2. For any sub-view table (viewPane: 'sub'), do NOT generate any additional rows. You MUST only output the pre-existing rows provided for that table. If the sub-view table has no pre-existing rows, output an empty array for that table ID.\n`;
     prompt += `3. You MUST maintain referential integrity. Child tables' foreign key columns MUST EXACTLY match one of the parent tables' primary key values generated in the same response or present in pre-existing rows.\n`;
     prompt += `4. Maintain semantic consistency across tables (e.g. transaction dates, accounts, descriptions should align logically).\n`;
