@@ -42,7 +42,7 @@ export const AiGeneratePromptModal: React.FC<AiGeneratePromptModalProps> = ({
                 
                 <div className="p-5 flex flex-col gap-4">
                     <p className="text-xs text-gray-500 leading-relaxed">
-                        現在のインスタンスデータに対して、初期値と生成ルールの指示を個別に設定できます。<br />
+                        テーブル定義に基づいてサンプルデータを新規生成します（既存のインスタンスデータはクリアされます）。<br />
                         <span className="text-indigo-600 font-semibold">{AI_MODAL_TIPS.title}</span> <span dangerouslySetInnerHTML={{ __html: AI_MODAL_TIPS.body }} />
                     </p>
                     

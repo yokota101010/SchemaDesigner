@@ -10,7 +10,7 @@
  */
 export const AI_MODAL_TIPS = {
     title: "💡 意図通りに動かすコツ:",
-    body: "同名項目の混同を防ぐため、「[テーブル名].[項目名]」の形式（例: <code>収支取引明細.摘要</code>）で明記するとAIが正しく理解しやすくなります。<br />特に指定がなければ、そのまま「生成開始」をクリックしてください（全面的に再生成されます）。"
+    body: "同名項目の混同を防ぐため、「[テーブル名].[項目名]」の形式（例: <code>収支取引明細.摘要</code>）で明記するとAIが正しく理解しやすくなります。<br />特に指定がなければ、そのまま「生成開始」をクリックしてください。"
 };
 
 /**
@@ -91,12 +91,17 @@ export const AI_PROMPT_DERIVATION_ROLE = (tableName: string): string =>
  * 導出項目計算における自己検算とChain of Thoughtを促す共通指示
  */
 export const AI_PROMPT_DERIVATION_VERIFICATION_RULES = `
-- **Explain Calculation Steps (Chain of Thought)**: BEFORE outputting the final JSON block, you MUST write down a step-by-step mathematical explanation of how you computed the derived columns for each row in a human-readable text section. For example:
+- **Explain Calculation Steps (Chain of Thought)**: BEFORE outputting the final JSON block, you MUST write down a step-by-step mathematical explanation of how you computed the derived columns for each row in a human-readable text section.
+  For each calculation, explicitly state:
+  1. The target record's unique ID and group keys (e.g., parent entity ID, month, category code).
+  2. The referenced records matching those exact keys (filter criteria). List which records were included and which were excluded to avoid mixing up different scopes (e.g., ensure you do NOT sum transaction amounts from entity B when calculating the balance for entity A).
+  3. The mathematical formula applied.
+  4. The step-by-step calculation trace.
+  Example:
   * "Table: [TableName], Column: [ColumnName]"
-  * "Row 1 (Date: 2026-05-08): Starting balance 43800 - Expense 4500 = 39300."
-  * "Row 2 (Date: 2026-05-10): Prior balance 39300 + Transfer 20000 = 59300."
-  * "Row 3 (Date: 2026-05-15): Prior balance 59300 - Expense 1500 = 57800."
-- **Self-Verification (CRITICAL)**: After writing down the calculation steps, double-check that every mathematical calculation is 100% correct, and that you have strictly respected the chronological order of transactions (do NOT include future transactions in the running total for a past row). Check the polarities (plus/minus) for all transfer records (e.g., transfer to a target account is a PLUS, transfer from a target account is a MINUS). Once verified, output the final, corrected JSON dataset inside a \`\`\`json ... \`\`\` block.
+  * "Row 1 (Entity ID: 101, Date: 2026-04-01): Beginning balance 50000. Filtered 2026-04 records for Entity 101: Tx 2 (-8000), Tx 3 (-1500). Records for other entities (like Tx 5 for Entity 102) are EXCLUDED. Total change = -9500. Ending balance = 50000 - 9500 = 40500."
+  * "Row 2 (Entity ID: 102, Date: 2026-04-01): Beginning balance 200000. Filtered records for Entity 102: Tx 1 (+50000), Tx 5 (-7000), Tx 6 (-102000). Total change = -59000. Ending balance = 200000 - 59000 = 141000."
+- **Self-Verification (CRITICAL)**: After writing down the calculation steps, perform a self-audit on all rows. Double-check that every mathematical calculation is 100% correct, and that you have strictly respected the chronological order of transactions. Ensure that: \`Current Value = Previous Value + Increase - Decrease\` holds true for every running total. If a discrepancy is found, correct the values in the JSON before returning.
 `;
 
 /**
@@ -104,13 +109,14 @@ export const AI_PROMPT_DERIVATION_VERIFICATION_RULES = `
  */
 export const AI_PROMPT_DERIVATION_RULES = `
 ### Calculation Rules (CRITICAL):
-1. **Calculate independently for each row**: You must evaluate each row in 'Target Table' one by one. Read the values in its key/relationship columns (e.g., matching category code, date, or IDs), filter the related tables' data by those exact values, and calculate the derived value based on that filtered subset.
+1. **Calculate independently for each row (Strict Filtering)**: You must evaluate each row in 'Target Table' one by one. Read the values in its key/relationship columns, filter the related tables' data by those exact values, and calculate the derived value based on that filtered subset. You MUST NOT include any records that do not match the key values (e.g., if filtering by ID '101', records with ID '102' must be strictly excluded).
 2. **DO NOT copy-paste values across different rows**: It is a critical error to calculate a value for one row and copy that same value (e.g., '7500') to all other rows. Each row has different key conditions and MUST have its own calculated value.
 3. **Match column IDs with Physics Names**: Use 'Columns Map' provided for both target and related tables to translate formulas (written in Physics Names, e.g., 'SUM(収支取引明細.取引額)') into column ID matches (e.g., summing column '取引額' from the rows of '収支取引明細' where the category code '費目C' matches the current row's category code).
 4. **Handle empty matches**: If no matching records exist in the related tables for a given row's keys, compute the value as '0' or an appropriate empty value, rather than copying a value from another row.
 5. **Schema and row integrity**: You MUST return the EXACT same number of rows (with the same 'id' and other existing column values). Do NOT add, delete, or reorder any rows. Only populate the derived/dependent columns.
 6. **Handle sequential carry-over (accumulation)**: If a derived column formula references a previous period, previous row, or cumulative value (e.g., '前月の...', '前行 of...', '繰越金', '累積'), evaluate the rows sequentially in the exact order they are presented. The input rows have been pre-sorted by the specified logical order to ensure correctness. Carry over the calculated values sequentially from top to bottom.
-7. **Double-check Arithmetic Calculations (CRITICAL)**: For complex running totals, accumulations, additions, or subtractions (e.g., calculating '口座残高', '振替元残高', '振替先残高'), you MUST double-check your math. Show extra care not to miss any transaction rows that occurred on or before the current row's timestamp. Perform the addition and subtraction step-by-step to prevent calculation errors.
+7. **Double-check Arithmetic Calculations (CRITICAL)**: For complex running totals, accumulations, additions, or subtractions, you MUST double-check your math. Show extra care not to mix up values from different entities/groups. Ensure you carry over the previous row's final balance only to the matching entity's next chronological row. Perform the addition and subtraction step-by-step to prevent calculation errors.
+8. **Entity-Level Isolation**: Ensure that transaction lists, balances, and calculations are kept isolated between different entity identifiers. Do NOT mix records of entity A with entity B when compiling summaries or calculating balances.
 
 ### Verification and Output Process (CRITICAL):
 ${AI_PROMPT_DERIVATION_VERIFICATION_RULES}

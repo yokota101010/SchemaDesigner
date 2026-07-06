@@ -4,7 +4,7 @@ import { buildSingleTableResponseSchema, buildSingleTableDerivationSchema, build
 import { buildSingleTablePrompt, buildSingleTableDerivationPrompt, buildInitialValueParsingPrompt, buildAllTablesPrompt, buildAllTablesDerivationPrompt } from '../../utils/aiPromptBuilder';
 import { mergeMockRows } from '../../utils/mockDataMerger';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-2.5-pro';
 
 export class GeminiAiClient implements AiClient {
   async generateMockData(
