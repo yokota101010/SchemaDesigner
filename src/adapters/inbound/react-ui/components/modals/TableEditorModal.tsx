@@ -11,6 +11,7 @@ interface TableEditorModalProps {
     valueObjects: ValueObjectPreset[];
     initiateDeleteTable: (tableId: string) => void;
     updateTableName: (tableId: string, name: string) => void;
+    updateTableDescription: (tableId: string, description: string) => void;
     updateTableOrderBy: (tableId: string, orderBy: OrderBy) => void;
     addColumn: (tableId: string) => void;
     updateColumn: (tableId: string, columnId: string, field: keyof Column, value: any) => void;
@@ -32,7 +33,7 @@ interface TableEditorModalProps {
 
 export const TableEditorModal: React.FC<TableEditorModalProps> = ({
     editingTable, tables, valueObjects,
-    initiateDeleteTable, updateTableName, updateTableOrderBy, addColumn, updateColumn,
+    initiateDeleteTable, updateTableName, updateTableDescription, updateTableOrderBy, addColumn, updateColumn,
     deleteColumn, moveColumn,
     relationships, deleteRelationship,
     addFkRelationship, updateFkRelationshipParent,
@@ -109,26 +110,38 @@ export const TableEditorModal: React.FC<TableEditorModalProps> = ({
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-6">
-                    <div className="flex gap-4 mb-6">
-                        <div className="flex-1 max-w-sm">
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">テーブル名</label>
-                            <input
-                                type="text"
-                                value={editingTable.name}
-                                onChange={(e) => updateTableName(editingTable.id, e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-sm"
-                            />
+                    <div className="flex flex-col gap-4 mb-6">
+                        <div className="flex gap-4">
+                            <div className="flex-1 max-w-sm">
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">テーブル名</label>
+                                <input
+                                    type="text"
+                                    value={editingTable.name}
+                                    onChange={(e) => updateTableName(editingTable.id, e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-sm"
+                                />
+                            </div>
+                            <div className="w-48">
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">配置ペイン</label>
+                                <select
+                                    value={editingTable.viewPane || 'main'}
+                                    onChange={(e) => updateTableViewPane(editingTable.id, e.target.value as 'main' | 'sub')}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer text-sm"
+                                >
+                                    <option value="main">メインビュー</option>
+                                    <option value="sub">サブビュー</option>
+                                </select>
+                            </div>
                         </div>
-                        <div className="w-48">
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">配置ペイン</label>
-                            <select
-                                value={editingTable.viewPane || 'main'}
-                                onChange={(e) => updateTableViewPane(editingTable.id, e.target.value as 'main' | 'sub')}
-                                className="w-full px-3 py-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none cursor-pointer text-sm"
-                            >
-                                <option value="main">メインビュー</option>
-                                <option value="sub">サブビュー</option>
-                            </select>
+                        <div className="w-full">
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">テーブル全体のビジネスルール・制約条件 (任意)</label>
+                            <textarea
+                                value={editingTable.description || ''}
+                                onChange={(e) => updateTableDescription(editingTable.id, e.target.value)}
+                                placeholder="例：月末資産残高は、各口座の月末残高の合計値と一致しなければならない。注文ステータスが'配送済'の場合、配送日時は必須。"
+                                rows={2}
+                                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow text-sm resize-y"
+                            />
                         </div>
                     </div>
 

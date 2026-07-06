@@ -107,7 +107,11 @@ export const buildSingleTablePrompt = (
   includeDependent = false,
   valueObjects?: ValueObjectPreset[]
 ): string => {
-    let prompt = AI_PROMPT_SYSTEM_ROLE(table.name, table.id) + `\n\n### Table Columns:\n`;
+    let prompt = AI_PROMPT_SYSTEM_ROLE(table.name, table.id) + `\n\n`;
+    if (table.description && table.description.trim() !== '') {
+        prompt += `### Table Business Rules:\n"${table.description}"\n\n`;
+    }
+    prompt += `### Table Columns:\n`;
 
     const physicalColIds = table.columns.filter(c => !table.columns.some(x => x.parentColumnId === c.id)).map(c => c.id);
 
@@ -233,6 +237,9 @@ export const buildSingleTableDerivationPrompt = (
   otherInstructions = ''
 ): string => {
     let prompt = AI_PROMPT_DERIVATION_ROLE(table.name);
+    if (table.description && table.description.trim() !== '') {
+        prompt += `### Target Table Business Rules:\n"${table.description}"\n\n`;
+    }
     
     prompt += `### Target Table '${table.name}' Columns:\n`;
     table.columns.forEach(col => {
@@ -364,6 +371,9 @@ export const buildAllTablesPrompt = (
     prompt += `### Database Schema Definitions:\n`;
     tables.forEach(table => {
         prompt += `- Table: '${table.name}' (ID: '${table.id}')\n`;
+        if (table.description && table.description.trim() !== '') {
+            prompt += `  * Table Business Rules: "${table.description}"\n`;
+        }
         prompt += `  * Columns:\n`;
         const physicalColIds = table.columns.filter(c => !table.columns.some(x => x.parentColumnId === c.id)).map(c => c.id);
 
@@ -466,6 +476,9 @@ export const buildAllTablesDerivationPrompt = (
     prompt += `### Database Schema and Derivation Formulas:\n`;
     tables.forEach(table => {
         prompt += `- Table: '${table.name}' (ID: '${table.id}')\n`;
+        if (table.description && table.description.trim() !== '') {
+            prompt += `  * Table Business Rules: "${table.description}"\n`;
+        }
         const depCols = table.columns.filter(c => c.attributeType === 'dependent' && !table.columns.some(x => x.parentColumnId === c.id));
         if (depCols.length > 0) {
             prompt += `  * Derived Columns & Calculation Formulas:\n`;

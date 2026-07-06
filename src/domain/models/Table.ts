@@ -52,4 +52,5 @@ export interface Table {
   orderBy?: OrderBy;
   uniqueKeys?: UniqueKey[];
   viewPane?: 'main' | 'sub';
+  description?: string;
 }

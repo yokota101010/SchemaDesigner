@@ -4,6 +4,7 @@ export interface SchemaUseCase {
   addTable(tables: Table[], viewOffset: { x: number; y: number }, canvasWidth: number, canvasHeight: number): Table[];
   deleteTable(tableId: string, tables: Table[], relationships: Relationship[], valueObjects: ValueObjectPreset[]): { tables: Table[], relationships: Relationship[] };
   updateTableName(tableId: string, name: string, tables: Table[]): Table[];
+  updateTableDescription(tableId: string, description: string, tables: Table[]): Table[];
   updateTableOrderBy(tableId: string, orderBy: OrderBy, tables: Table[]): Table[];
   toggleTableMinimize(tableId: string, tables: Table[]): Table[];
   updateTableViewPane(tableId: string, viewPane: 'main' | 'sub', tables: Table[]): Table[];

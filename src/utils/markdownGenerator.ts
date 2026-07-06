@@ -99,6 +99,10 @@ export function generateMarkdown(projectData: ProjectData): string {
     const viewPaneText = table.viewPane === 'sub' ? ' (サブビュー / マスタ等)' : ' (メインビュー)';
     md += `* ビュー分類: ${viewPaneText}\n\n`;
 
+    if (table.description && table.description.trim() !== '') {
+      md += `**テーブル全体のビジネスルール・制約条件**:\n${table.description}\n\n`;
+    }
+
     // カラム定義の表
     md += `#### スキーマ定義\n\n`;
     md += `| カラム名 (物理) | データ型 | PK | FK | UQ | 区分 | カラム定義・ビジネスルール |\n`;

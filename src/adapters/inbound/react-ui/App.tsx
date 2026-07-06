@@ -85,7 +85,7 @@ function SchemaDesigner() {
       valueObjects, setValueObjects, updateValueObjects,
       editingTableId, setEditingTableId, connectionMode, setConnectionMode,
       selectedRelId, setSelectedRelId, autoUpdateRelationshipType,
-      addTable, deleteTable, initiateDeleteTable, updateTableName, updateTableOrderBy,
+      addTable, deleteTable, initiateDeleteTable, updateTableName, updateTableDescription, updateTableOrderBy,
       toggleTableMinimize, updateTableViewPane, alignSubTables, addColumn, deleteColumn, updateColumn,
       updateColumnReference, moveColumn, addRow, deleteRow, updateRowValue,
       startConnectionMode, handleConnect, deleteRelationship,
@@ -536,6 +536,7 @@ function SchemaDesigner() {
         editingTable={editingTable} tables={tables} 
         valueObjects={valueObjects}
         initiateDeleteTable={initiateDeleteTable} updateTableName={updateTableName} 
+        updateTableDescription={updateTableDescription}
         updateTableOrderBy={updateTableOrderBy}
         addColumn={addColumn} updateColumn={updateColumn} 
         deleteColumn={deleteColumn} moveColumn={moveColumn}

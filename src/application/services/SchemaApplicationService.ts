@@ -45,6 +45,10 @@ export class SchemaApplicationService implements SchemaUseCase {
     return tables.map(t => t.id === tableId ? { ...t, name } : t);
   }
 
+  updateTableDescription(tableId: string, description: string, tables: Table[]): Table[] {
+    return tables.map(t => t.id === tableId ? { ...t, description } : t);
+  }
+
   updateTableOrderBy(tableId: string, orderBy: OrderBy, tables: Table[]): Table[] {
     return tables.map(t => t.id === tableId ? { ...t, orderBy } : t);
   }

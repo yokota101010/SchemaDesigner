@@ -66,6 +66,11 @@ export const useSchemaState = (
     setTables(nextTables);
   }, [tables, schemaUseCase]);
 
+  const updateTableDescription = useCallback((tableId: string, description: string) => {
+    const nextTables = schemaUseCase.updateTableDescription(tableId, description, tables);
+    setTables(nextTables);
+  }, [tables, schemaUseCase]);
+
   const updateTableOrderBy = useCallback((tableId: string, orderBy: OrderBy) => {
     const nextTables = schemaUseCase.updateTableOrderBy(tableId, orderBy, tables);
     setTables(nextTables);
@@ -210,7 +215,7 @@ export const useSchemaState = (
     selectedRelId, setSelectedRelId,
     autoUpdateRelationshipType,
     addTable, deleteTable, initiateDeleteTable,
-    updateTableName, updateTableOrderBy, toggleTableMinimize,
+    updateTableName, updateTableDescription, updateTableOrderBy, toggleTableMinimize,
     updateTableViewPane,
     alignSubTables,
     addColumn, deleteColumn, updateColumn, updateColumnReference,
