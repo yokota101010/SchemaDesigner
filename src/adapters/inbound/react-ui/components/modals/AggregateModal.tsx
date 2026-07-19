@@ -163,20 +163,16 @@ export const AggregateModal: React.FC<AggregateModalProps> = ({
                             </div>
                         ) : (
                             <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col flex-1">
-                                <div className="overflow-x-auto">
+                                <div className="overflow-auto flex-1 max-h-[350px]">
                                     <table className="w-full text-left border-collapse min-w-max">
-                                        <thead>
-                                            <tr className="bg-gray-100 text-gray-700 font-semibold border-b border-gray-200">
+                                        <thead className="sticky top-0 bg-gray-100 z-20 shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">
+                                            <tr className="text-gray-700 font-semibold bg-gray-100">
                                                 <th className="p-3 w-12 text-center"></th>
                                                 <th className="p-3 w-64">テーブル名</th>
                                                 <th className="p-3 w-64">所属する集約</th>
                                                 <th className="p-3 text-center w-48">ロール（役割）</th>
                                             </tr>
                                         </thead>
-                                    </table>
-                                </div>
-                                <div className="overflow-y-auto flex-1 max-h-[350px]">
-                                    <table className="w-full text-left border-collapse min-w-max">
                                         <tbody>
                                             {orderedTables.map((table, idx) => {
                                                 const currentAssignment = aggregateData[table.id];

@@ -4,7 +4,12 @@ import { buildSingleTableResponseSchema, buildSingleTableDerivationSchema, build
 import { buildSingleTablePrompt, buildSingleTableDerivationPrompt, buildInitialValueParsingPrompt, buildAllTablesPrompt, buildAllTablesDerivationPrompt } from '../../utils/aiPromptBuilder';
 import { mergeMockRows } from '../../utils/mockDataMerger';
 
-const GEMINI_MODEL = 'gemini-2.5-pro';
+const getModel = () => {
+  if (typeof localStorage !== 'undefined') {
+    return localStorage.getItem('schema-designer-gemini-model') || 'gemini-3.5-flash';
+  }
+  return 'gemini-3.5-flash';
+};
 
 export class GeminiAiClient implements AiClient {
   async generateMockData(
@@ -92,11 +97,13 @@ export class GeminiAiClient implements AiClient {
 
     console.log("[RDB Mock Data Generator] 第2段階: 全テーブルの導出項目の一括計算を開始します...");
     try {
-      const calculatedData = await this.calculateAllTablesDerivations(tables, allGeneratedData, apiKey, otherInstructions);
+      const calculatedData = await this.calculateAllTablesDerivations(tables, relationships, allGeneratedData, apiKey, otherInstructions);
+      console.log(`[RDB Mock Data Generator] 第2段階の計算結果を受信しました:`, calculatedData);
 
       // 各テーブルの計算結果をマージする
       tables.forEach(table => {
-        const calculatedRows = calculatedData[table.id] || [];
+        const tableData = calculatedData[table.id] || {};
+        const calculatedRows = Array.isArray(tableData.rows) ? tableData.rows : [];
         const currentTableData = allGeneratedData[table.id] || [];
         const pkCols = table.columns.filter(col => col.isPk && col.attributeType !== 'dependent' && !table.columns.some(x => x.parentColumnId === col.id));
 
@@ -110,6 +117,11 @@ export class GeminiAiClient implements AiClient {
                 return r[pkCol.id] !== undefined && row[pkCol.id] !== undefined && String(r[pkCol.id]) === String(row[pkCol.id]);
               });
             });
+            
+            // 主キーでのマッチングに失敗した場合、同じ行番号（インデックス）のデータを代替で使用する（AIのブレ防止）
+            if (!match && calculatedRows[idx]) {
+              match = calculatedRows[idx];
+            }
           }
 
           if (match) {
@@ -137,7 +149,7 @@ export class GeminiAiClient implements AiClient {
   private async parseAndApplyInitialValues(tables: Table[], initialInstructions: string, apiKey: string): Promise<any> {
     const prompt = buildInitialValueParsingPrompt(tables, initialInstructions);
     const responseSchema = buildInitialValueParsingSchema(tables);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${getModel()}:generateContent?key=${apiKey}`;
 
     const response = await this.fetchWithRetry(url, {
       method: 'POST',
@@ -179,8 +191,8 @@ export class GeminiAiClient implements AiClient {
     valueObjects: ValueObjectPreset[] = []
   ): Promise<any> {
     const prompt = buildAllTablesPrompt(tables, relationships, parentData, rowCount, otherInstructions, valueObjects);
-    const responseSchema = buildAllTablesResponseSchema(tables);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    const responseSchema = buildAllTablesResponseSchema(tables, relationships);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${getModel()}:generateContent?key=${apiKey}`;
 
     const response = await this.fetchWithRetry(url, {
       method: 'POST',
@@ -213,13 +225,14 @@ export class GeminiAiClient implements AiClient {
 
   private async calculateAllTablesDerivations(
     tables: Table[],
+    relationships: Relationship[],
     allGeneratedData: Record<string, any[]>,
     apiKey: string,
     otherInstructions = ''
   ): Promise<any> {
     const prompt = buildAllTablesDerivationPrompt(tables, allGeneratedData, otherInstructions);
-    const responseSchema = buildAllTablesDerivationSchema(tables);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    const responseSchema = buildAllTablesDerivationSchema(tables, relationships);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${getModel()}:generateContent?key=${apiKey}`;
 
     const response = await this.fetchWithRetry(url, {
       method: 'POST',
@@ -250,19 +263,27 @@ export class GeminiAiClient implements AiClient {
     }
   }
 
-  private async fetchWithRetry(url: string, options: any, maxRetries = 7): Promise<Response> {
+  private async fetchWithRetry(url: string, options: any, maxRetries = 3): Promise<Response> {
     let delay = 10000;
     for (let i = 0; i < maxRetries; i++) {
       try {
         const response = await fetch(url, options);
         if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
           if (response.status === 429) {
+            delay = Math.max(delay, 60000); // レート制限解除のため最初から60秒待機
             try {
               const clonedResponse = response.clone();
               const errJson = await clonedResponse.json();
               const errMsg = errJson?.error?.message || "";
-              if (errMsg.toLowerCase().includes("day") || errMsg.toLowerCase().includes("daily")) {
-                console.error(`[Gemini API] 1日の利用上限（Daily Quota）に達したため、リトライを中止します: ${errMsg}`);
+              const lowerMsg = errMsg.toLowerCase();
+              if (
+                lowerMsg.includes("day") || 
+                lowerMsg.includes("daily") || 
+                lowerMsg.includes("quota") || 
+                lowerMsg.includes("limit") || 
+                lowerMsg.includes("exhausted")
+              ) {
+                console.error(`[Gemini API] 利用上限（Quota Exceeded/Limit）に達したため、リトライを中止します: ${errMsg}`);
                 return response;
               }
             } catch (jsonErr) {
@@ -275,7 +296,7 @@ export class GeminiAiClient implements AiClient {
           }
           console.warn(`[Gemini API] ステータス ${response.status} を検出。${delay}ms 待機して自動リトライします... (試行 ${i + 1}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2.0;
+          delay = Math.min(delay * 2.0, 60000); // 最大でも60秒以上は増やさない
           continue;
         }
         return response;
@@ -283,7 +304,7 @@ export class GeminiAiClient implements AiClient {
         if (i === maxRetries - 1) throw err;
         console.warn(`[Gemini API] 通信エラー: ${err.message}。${delay}ms 後に自動リトライします... (試行 ${i + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2.0;
+        delay = Math.min(delay * 2.0, 60000);
       }
     }
     throw new Error("Fetch failed after maximum retries");

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Key, Trash2, Eye, EyeOff } from '../Icons';
+import { Settings, X, Key, Trash2, Eye, EyeOff, Icon } from '../Icons';
 
 interface AiSettingsModalProps {
     showModal: boolean;
@@ -8,13 +8,16 @@ interface AiSettingsModalProps {
 
 export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, setShowModal }) => {
     const [apiKey, setApiKey] = useState<string>('');
+    const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash');
     const [showKey, setShowKey] = useState<boolean>(false);
     const [isSaved, setIsSaved] = useState<boolean>(false);
 
     useEffect(() => {
         if (showModal) {
             const savedKey = localStorage.getItem('schema-designer-gemini-apikey') || '';
+            const savedModel = localStorage.getItem('schema-designer-gemini-model') || 'gemini-3.5-flash';
             setApiKey(savedKey);
+            setSelectedModel(savedModel);
             setIsSaved(!!savedKey);
         }
     }, [showModal]);
@@ -24,20 +27,23 @@ export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, set
     const handleSave = () => {
         if (apiKey.trim()) {
             localStorage.setItem('schema-designer-gemini-apikey', apiKey.trim());
+            localStorage.setItem('schema-designer-gemini-model', selectedModel);
             setIsSaved(true);
             setShowModal(false);
-            alert("APIキーを保存しました。");
+            alert("設定を保存しました。");
         } else {
             alert("APIキーを入力してください。");
         }
     };
 
     const handleDelete = () => {
-        if (confirm("保存されているAPIキーを削除しますか？")) {
+        if (confirm("保存されている設定（APIキーとモデル）を削除しますか？")) {
             localStorage.removeItem('schema-designer-gemini-apikey');
+            localStorage.removeItem('schema-designer-gemini-model');
             setApiKey('');
+            setSelectedModel('gemini-3.5-flash');
             setIsSaved(false);
-            alert("APIキーを削除しました。");
+            alert("設定を削除しました。");
         }
     };
 
@@ -60,6 +66,25 @@ export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, set
                         APIキーはローカルストレージ（ブラウザ）に安全に保存され、直接GoogleのAPIエンドポイントとの通信にのみ使用されます。
                     </p>
                     
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                            <Icon name="robot" className="w-3.5 h-3.5 text-blue-500" />
+                            使用モデル
+                        </label>
+                        <select
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-xs bg-white transition-shadow cursor-pointer"
+                        >
+                            <option value="gemini-3.5-flash">gemini-3.5-flash (最新・高速・推奨)</option>
+                            <option value="gemini-3.5-pro">gemini-3.5-pro (最新・高精度 - クォータ制限厳)</option>
+                            <option value="gemini-2.5-flash">gemini-2.5-flash (前世代高速版)</option>
+                            <option value="gemini-2.5-pro">gemini-2.5-pro (前世代高精度版)</option>
+                            <option value="gemini-1.5-flash">gemini-1.5-flash (旧世代高速版)</option>
+                            <option value="gemini-1.5-pro">gemini-1.5-pro (旧世代高精度版)</option>
+                        </select>
+                    </div>
+
                     <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-bold text-gray-700 flex items-center gap-1">
                             <Key className="w-3.5 h-3.5 text-blue-500" />

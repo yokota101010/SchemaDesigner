@@ -28,8 +28,8 @@ export function generateMarkdown(projectData: ProjectData): string {
   md += `> 出力日時: ${new Date(exportedAt).toLocaleString('ja-JP')}\n\n`;
 
   // 2. ドメイン集約 (Aggregates) の定義
+  md += `## 1. ドメイン集約 (Domain Aggregates)\n\n`;
   if (aggregates.length > 0) {
-    md += `## 1. ドメイン集約 (Domain Aggregates)\n\n`;
     md += `トランザクションの整合性を保つ境界となる集約の定義です。\n\n`;
 
     aggregates.forEach(agg => {
@@ -70,11 +70,13 @@ export function generateMarkdown(projectData: ProjectData): string {
       md += `### その他 (集約未設定)\n`;
       md += `- テーブル: ${unclassifiedTables.map(t => `\`${t.name}\``).join(', ')}\n\n`;
     }
+  } else {
+    md += `※ ドメイン集約は定義されていません。\n\n`;
   }
 
   // 3. 値オブジェクト定義 (Value Objects)
+  md += `## 2. 値オブジェクト定義 (Value Objects)\n\n`;
   if (valueObjects.length > 0) {
-    md += `## 2. 値オブジェクト定義 (Value Objects)\n\n`;
     md += `ドメインモデルで再利用されるデータの型とビジネスルールです。\n\n`;
 
     valueObjects.forEach(vo => {
@@ -84,10 +86,25 @@ export function generateMarkdown(projectData: ProjectData): string {
       md += `| プロパティ名 | データ型 | 説明 |\n`;
       md += `| :--- | :--- | :--- |\n`;
       vo.properties.forEach(prop => {
-        md += `| \`${prop.name}\` | \`${prop.type}\` | ${prop.description || ''} |\n`;
+        let displayPropType = prop.type;
+        if (prop.type && prop.type.startsWith('FK:')) {
+          const refTableId = prop.type.substring(3);
+          const refTable = tables.find(t => t.id === refTableId);
+          if (refTable) {
+            const refPkCol = refTable.columns.find(c => c.isPk);
+            if (refPkCol) {
+              displayPropType = refPkCol.type;
+            } else {
+              displayPropType = `FK:${refTable.name}`;
+            }
+          }
+        }
+        md += `| \`${prop.name}\` | \`${displayPropType}\` | ${prop.description || ''} |\n`;
       });
       md += `\n`;
     });
+  } else {
+    md += `※ 値オブジェクトは定義されていません。\n\n`;
   }
 
   // 4. テーブル・カラム定義 (Tables & Columns)
@@ -114,24 +131,36 @@ export function generateMarkdown(projectData: ProjectData): string {
       // FKの親情報解決
       let fk = '';
       if (col.isFk) {
-        const rel = relationships.find(r => r.to === table.id && r.mappings.some(m => m.childColId === col.id));
-        if (rel) {
-          const parentTable = tables.find(t => t.id === rel.from);
-          const mapping = rel.mappings.find(m => m.childColId === col.id);
-          const parentCol = parentTable?.columns.find(c => c.id === mapping?.parentColId);
-          if (parentTable && parentCol) {
-            fk = `✅ (\`${parentTable.name}.${parentCol.name}\`)`;
-          } else {
-            fk = '✅';
-          }
+        const matchingRels = relationships.filter(r => r.to === table.id && r.mappings.some(m => m.childColId === col.id));
+        if (matchingRels.length > 0) {
+          const fkLabels = matchingRels.map(rel => {
+            const parentTable = tables.find(t => t.id === rel.from);
+            const mapping = rel.mappings.find(m => m.childColId === col.id);
+            const parentCol = parentTable?.columns.find(c => c.id === mapping?.parentColId);
+            if (parentTable && parentCol) {
+              return `✅ (\`${parentTable.name}.${parentCol.name}\`)`;
+            }
+            return '✅';
+          });
+          fk = fkLabels.join(', ');
         } else {
           fk = '✅';
         }
       }
 
       // UQの解決
-      const isUnique = col.isUnique || table.uniqueKeys?.some(uk => uk.columnIds.includes(col.id));
-      const uq = isUnique ? '✅' : '';
+      const uqLabels: string[] = [];
+      if (col.isUnique) {
+        uqLabels.push('✅');
+      }
+      if (table.uniqueKeys && table.uniqueKeys.length > 0) {
+        table.uniqueKeys.forEach((uk, idx) => {
+          if (uk.columnIds?.includes(col.id)) {
+            uqLabels.push(`✅ (UQ${idx + 1})`);
+          }
+        });
+      }
+      const uq = uqLabels.join(', ');
 
       const attrType = col.attributeType === 'dependent' ? '導出項目' : '独立';
       
@@ -147,7 +176,21 @@ export function generateMarkdown(projectData: ProjectData): string {
       // テーブル表記内の改行を <br /> に変換してMarkdown崩れを防ぐ
       const safeDesc = desc.replace(/\r?\n/g, '<br />');
 
-      md += `| \`${col.name}\` | \`${col.type}\` | ${pk} | ${fk} | ${uq} | ${attrType} | ${safeDesc} |\n`;
+      let displayType = col.type;
+      if (col.type && col.type.startsWith('FK:')) {
+        const refTableId = col.type.substring(3);
+        const refTable = tables.find(t => t.id === refTableId);
+        if (refTable) {
+          const refPkCol = refTable.columns.find(c => c.isPk);
+          if (refPkCol) {
+            displayType = refPkCol.type;
+          } else {
+            displayType = `FK:${refTable.name}`;
+          }
+        }
+      }
+
+      md += `| \`${col.name}\` | \`${displayType}\` | ${pk} | ${fk} | ${uq} | ${attrType} | ${safeDesc} |\n`;
     });
     md += `\n`;
 

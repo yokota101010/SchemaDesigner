@@ -14,7 +14,6 @@ export interface Column {
   derivation: string;
   isVisible: boolean;
   description?: string;
-  reference?: ColumnReference;
   isSelfContainedDependent?: boolean;
   isFirstPhaseCalculable?: boolean;
   // 値オブジェクト関連

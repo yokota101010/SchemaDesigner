@@ -84,10 +84,10 @@ function SchemaDesigner() {
       tables, setTables, relationships, setRelationships,
       valueObjects, setValueObjects, updateValueObjects,
       editingTableId, setEditingTableId, connectionMode, setConnectionMode,
-      selectedRelId, setSelectedRelId, autoUpdateRelationshipType,
+      selectedRelId, setSelectedRelId, syncRelationships,
       addTable, deleteTable, initiateDeleteTable, updateTableName, updateTableDescription, updateTableOrderBy,
       toggleTableMinimize, updateTableViewPane, alignSubTables, addColumn, deleteColumn, updateColumn,
-      updateColumnReference, moveColumn, addRow, deleteRow, updateRowValue,
+      moveColumn, addRow, deleteRow, updateRowValue,
       startConnectionMode, handleConnect, deleteRelationship,
       addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol,
       addUniqueKey, deleteUniqueKey, toggleUniqueKeyMapping
@@ -115,7 +115,7 @@ function SchemaDesigner() {
   };
 
   const handleCompleteEdit = () => {
-      autoUpdateRelationshipType(tables);
+      syncRelationships(tables, relationships);
       setEditingTableId(null);
   };
 
@@ -284,6 +284,14 @@ function SchemaDesigner() {
       save();
   }, [projectName, tables, relationships, valueObjects, aggregates, aggregateData, aggregateTableOrder, isLoading]);
 
+  useEffect(() => {
+      localStorage.setItem('schema-designer-ai-initial-instructions', aiInitialInstructions);
+  }, [aiInitialInstructions]);
+
+  useEffect(() => {
+      localStorage.setItem('schema-designer-ai-other-instructions', aiOtherInstructions);
+  }, [aiOtherInstructions]);
+
   const handleAiGenerateData = () => {
       const apiKey = localStorage.getItem('schema-designer-gemini-apikey');
       if (!apiKey) {
@@ -299,9 +307,6 @@ function SchemaDesigner() {
 
       const apiKey = localStorage.getItem('schema-designer-gemini-apikey');
       if (!apiKey) return;
-
-      localStorage.setItem('schema-designer-ai-initial-instructions', aiInitialInstructions);
-      localStorage.setItem('schema-designer-ai-other-instructions', aiOtherInstructions);
 
       setShowAiLoadingModal(true);
       try {
@@ -353,7 +358,7 @@ function SchemaDesigner() {
   };
 
   const handleExportMarkdown = async () => {
-    const defaultName = 'spec.md';
+    const defaultName = 'domain-model.md';
 
     const cleanedTables = tables.map(t => ({
       ...t,

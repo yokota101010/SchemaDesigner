@@ -14,6 +14,20 @@ import {
 } from './aiPromptTemplates';
 import { resolveColumnType, isMasterTable } from './schemaUtils';
 
+/**
+ * 関連線（relationships）から指定された外部キーカラムの親テーブルおよび親カラム情報を逆引き解決する
+ */
+const getFkReference = (colId: string, tableId: string, relationships: Relationship[]) => {
+  const rel = relationships.find(r => r.to === tableId && r.mappings?.some(m => m.childColId === colId));
+  if (rel) {
+    const mapping = rel.mappings?.find(m => m.childColId === colId);
+    if (mapping) {
+      return { tableId: rel.from, columnId: mapping.parentColId || '' };
+    }
+  }
+  return undefined;
+};
+
 const getColumnTypeDescription = (col: Column, tables: Table[]): string => {
   if (col.type && col.type.startsWith('FK:')) {
     const refTableId = col.type.substring(3);
@@ -28,25 +42,8 @@ const getColumnTypeDescription = (col: Column, tables: Table[]): string => {
  * テーブルのソート順設定を文字列表現で取得する
  */
 const getSortDescriptions = (table: Table): string => {
-    if (!table.orderBy || !table.orderBy.type) return '';
-    let sortKeys: any[] = [];
-    if (table.orderBy.keys && table.orderBy.keys.length > 0) {
-        sortKeys = table.orderBy.keys;
-    } else {
-        let sortColIds: string[] = [];
-        if (table.orderBy.type === 'pk') {
-            sortColIds = table.columns.filter(c => c.isPk).map(c => c.id);
-        } else if (table.orderBy.type === 'uq' && table.orderBy.uqId) {
-            const targetUq = table.uniqueKeys?.find(uq => uq.id === table.orderBy!.uqId);
-            sortColIds = targetUq ? (targetUq.columnIds || []) : [];
-        }
-        const defaultDir = table.orderBy.direction || 'ASC';
-        sortKeys = sortColIds.map(cid => ({
-            columnId: cid,
-            direction: table.orderBy!.directions?.[cid] || defaultDir
-        }));
-    }
-    return sortKeys.map(keyInfo => {
+    if (!table.orderBy || !table.orderBy.keys || table.orderBy.keys.length === 0) return '';
+    return table.orderBy.keys.map(keyInfo => {
         const col = table.columns.find(c => c.id === keyInfo.columnId);
         if (!col) return '';
         const directionText = keyInfo.direction === 'DESC' ? 'descending' : 'ascending';
@@ -105,7 +102,8 @@ export const buildSingleTablePrompt = (
   rowCount = 3, 
   otherInstructions = '', 
   includeDependent = false,
-  valueObjects?: ValueObjectPreset[]
+  valueObjects?: ValueObjectPreset[],
+  tables: Table[] = []
 ): string => {
     let prompt = AI_PROMPT_SYSTEM_ROLE(table.name, table.id) + `\n\n`;
     if (table.description && table.description.trim() !== '') {
@@ -130,13 +128,18 @@ export const buildSingleTablePrompt = (
         prompt += '\n';
     });
 
-    const relevantFks = table.columns.filter(c => c.isFk && c.reference?.tableId);
+    const relevantFks = table.columns.map(c => {
+        if (!c.isFk) return null;
+        const ref = getFkReference(c.id, table.id, relationships);
+        return ref ? { colId: c.id, ...ref } : null;
+    }).filter(Boolean) as Array<{ colId: string, tableId: string, columnId: string }>;
+
     if (relevantFks.length > 0) {
         prompt += AI_PROMPT_REFERENTIAL_INTEGRITY_HEADER;
         
-        relevantFks.forEach(c => {
-            const parentTableId = c.reference!.tableId;
-            const parentColId = c.reference!.columnId;
+        relevantFks.forEach(rf => {
+            const parentTableId = rf.tableId;
+            const parentColId = rf.columnId;
             
             if (parentData[parentTableId] && Array.isArray(parentData[parentTableId])) {
                 const parentRows = parentData[parentTableId];
@@ -144,13 +147,13 @@ export const buildSingleTablePrompt = (
                 prompt += JSON.stringify(parentRows, null, 2) + '\n';
                 
                 const validKeys = parentRows.map(row => row[parentColId]).filter(value => value !== undefined && value !== null);
-                prompt += `  * VALID values for foreign key column '${c.id}' (referencing parent column '${parentColId}'): ${JSON.stringify(validKeys)}\n`;
+                prompt += `  * VALID values for foreign key column '${rf.colId}' (referencing parent column '${parentColId}'): ${JSON.stringify(validKeys)}\n`;
             }
         });
     }
 
     const allGeneratedTableIds = Object.keys(parentData);
-    const indirectTableIds = allGeneratedTableIds.filter(id => !relevantFks.some(c => c.reference?.tableId === id));
+    const indirectTableIds = allGeneratedTableIds.filter(id => !relevantFks.some(rf => rf.tableId === id));
     if (indirectTableIds.length > 0) {
         prompt += AI_PROMPT_SEMANTIC_CONSISTENCY_HEADER;
         
@@ -175,178 +178,108 @@ export const buildSingleTablePrompt = (
 
     if (table.rows && table.rows.length > 0) {
         prompt += AI_PROMPT_EXISTING_DATA_HEADER;
-        const existingData = table.rows.map((row: any) => {
-            const cleanRow: any = {};
-            physicalColIds.forEach(id => {
-                if (row[id] !== undefined) cleanRow[id] = row[id];
-            });
-            return cleanRow;
+        const cleanRows = table.rows.map(row => {
+            const r: any = {};
+            physicalColIds.forEach(id => r[id] = row[id]);
+            return r;
         });
-        prompt += JSON.stringify(existingData, null, 2) + '\n';
-        prompt += `\n* CRITICAL INSTRUCTION FOR EXISTING DATA (INITIAL RECORDS):\n`;
-        prompt += `- The existing rows listed above represent FIXED INITIAL/STARTING data. You MUST PRESERVE all these existing rows exactly as they are. Do NOT modify their values, and do NOT delete them.\n`;
-        prompt += `- Your job is to generate ADDITIONAL rows (like transaction items for subsequent dates, or other business records) that align with and build upon these initial records, complying with the user instructions.\n`;
+        prompt += JSON.stringify(cleanRows, null, 2) + '\n';
     }
 
-    if (table.uniqueKeys && table.uniqueKeys.length > 0) {
-        let uqText = '';
-        table.uniqueKeys.forEach((uq, idx) => {
-            const cols = uq.columnIds?.map(id => {
-                const col = table.columns.find(c => c.id === id);
-                return col ? col.name : null;
-            }).filter(Boolean) || [];
-            
-            if (cols.length > 0) {
-                uqText += `- UQ ${idx + 1}: Unique constraint on columns (${cols.join(', ')})\n`;
-            }
-        });
-        if (uqText) {
-            prompt += `\n### Unique Constraints:\n` + uqText;
-        }
+    if (otherInstructions && otherInstructions.trim() !== '') {
+        prompt += AI_PROMPT_USER_INSTRUCTIONS_HEADER + otherInstructions + '\n\n';
     }
 
-    const sortDesc = getSortDescriptions(table);
-    if (sortDesc && hasCarryOverFormula(table)) {
-        prompt += `\n### Evaluation Order and Carry-Over Constraint:\n`;
-        prompt += `- This table is evaluated sequentially based on the ORDER BY keys: [${sortDesc}]. Some derived columns carry over values from the previous record in this sequence (e.g., previous month's balance, previous row's value). Therefore, when the main sequence key (e.g., date, period, or sequence ID) advances, you MUST continue to generate corresponding rows for all active key/entity combinations (e.g., account codes, categories) that existed in the previous step of the sequence. This ensures the calculation and carry-over chain along the evaluation order is not broken.\n`;
-    }
-
-    const voConstraints = getVoConstraintsText(table, valueObjects);
-    if (voConstraints) {
-        prompt += voConstraints;
-    }
-
-    if (otherInstructions) {
-        prompt += AI_PROMPT_USER_INSTRUCTIONS_HEADER(otherInstructions, table.name, table.id);
-    }
-
-    const pkColumnId = table.columns.find(col => col.isPk)?.id || 'id';
-    prompt += AI_PROMPT_GENERATION_RULES(rowCount, pkColumnId);
-
+    prompt += AI_PROMPT_GENERATION_RULES(rowCount);
     return prompt;
 };
 
 /**
- * 第2段階用のプロンプトを構築する (導出項目の計算)
+ * 単一テーブルの導出項目計算用のプロンプトを構築する
  */
-export const buildSingleTableDerivationPrompt = (
-  table: Table, 
-  currentTableData: any[], 
-  allGeneratedData: Record<string, any[]>, 
-  tables: Table[], 
-  otherInstructions = ''
-): string => {
-    let prompt = AI_PROMPT_DERIVATION_ROLE(table.name);
+export const buildSingleTableDerivationPrompt = (table: Table, allGeneratedData: Record<string, any[]> = {}): string => {
+    let prompt = AI_PROMPT_DERIVATION_ROLE(table.name, table.id) + `\n\n`;
     if (table.description && table.description.trim() !== '') {
-        prompt += `### Target Table Business Rules:\n"${table.description}"\n\n`;
+        prompt += `### Table Business Rules:\n"${table.description}"\n\n`;
     }
     
-    prompt += `### Target Table '${table.name}' Columns:\n`;
-    table.columns.forEach(col => {
-        const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+    prompt += `### Table Schema Definition:\n`;
+    table.columns.forEach(c => {
+        const isVoParent = table.columns.some(x => x.parentColumnId === c.id);
         if (isVoParent) return;
 
-        const isDep = col.attributeType === 'dependent';
-        prompt += `- Column ID: '${col.id}', Physics Name: '${col.name}'${isDep ? ` (Derived using formula: [${col.derivation}])` : ''}\n`;
-    });
-    
-    prompt += `\n### Current Data for Target Table '${table.name}' (derived columns are empty or incomplete):\n`;
-    prompt += JSON.stringify(currentTableData, null, 2) + `\n\n`;
-    
-    prompt += `### Related Database Tables & Data (for your calculation reference):\n`;
-    Object.keys(allGeneratedData).forEach(tId => {
-        if (tId !== table.id) {
-            const refTable = tables.find(t => t.id === tId);
-            if (refTable) {
-                prompt += `- Table Name: '${refTable.name}' (ID: '${tId}'):\n`;
-                prompt += `  * Columns Map:\n`;
-                refTable.columns.forEach(col => {
-                    const isVoParent = refTable.columns.some(x => x.parentColumnId === col.id);
-                    if (isVoParent) return;
-
-                    prompt += `    - Column ID: '${col.id}', Physics Name: '${col.name}'\n`;
-                });
-                prompt += `  * Data:\n`;
-                prompt += JSON.stringify(allGeneratedData[tId], null, 2) + `\n\n`;
-            }
+        const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(c.id));
+        prompt += `- Column ID: '${c.id}', Physics Name: '${c.name}', Type: '${c.type}', PK: ${c.isPk}, UQ: ${isColUnique}, FK: ${c.isFk}`;
+        if (c.attributeType === 'dependent') {
+            prompt += `, (DERIVED) Formula: [${c.derivation || ''}]`;
         }
+        if (c.description) {
+            prompt += `, Description/Instruction: "${c.description}"`;
+        }
+        prompt += '\n';
+    });
+    prompt += '\n';
+
+    const currentRows = allGeneratedData[table.id] || [];
+    const physicalColIds = table.columns.filter(c => !table.columns.some(x => x.parentColumnId === c.id)).map(c => c.id);
+    const cleanCurrentRows = currentRows.map(row => {
+        const r: any = {};
+        physicalColIds.forEach(id => {
+            if (row[id] !== undefined) r[id] = row[id];
+        });
+        return r;
     });
 
-    if (table.orderBy && table.orderBy.type) {
-        let sortKeys: any[] = [];
-        
-        if (table.orderBy.keys && table.orderBy.keys.length > 0) {
-            sortKeys = table.orderBy.keys;
-        } else {
-            let sortColIds: string[] = [];
-            if (table.orderBy.type === 'pk') {
-                sortColIds = table.columns.filter(c => c.isPk).map(c => c.id);
-            } else if (table.orderBy.type === 'uq' && table.orderBy.uqId) {
-                const targetUq = table.uniqueKeys?.find(uq => uq.id === table.orderBy!.uqId);
-                sortColIds = targetUq ? (targetUq.columnIds || []) : [];
-            }
-            
-            const defaultDir = table.orderBy.direction || 'ASC';
-            sortKeys = sortColIds.map(cid => ({
-                columnId: cid,
-                direction: table.orderBy!.directions?.[cid] || defaultDir
-            }));
-        }
+    prompt += `### Current Generated Rows (Input - Some derived columns might be empty or incomplete. Fill them in!):\n`;
+    prompt += JSON.stringify(cleanCurrentRows, null, 2) + '\n\n';
 
-        const sortDescriptions = sortKeys.map(keyInfo => {
-            const col = table.columns.find(c => c.id === keyInfo.columnId);
-            if (!col) return '';
-            const directionText = keyInfo.direction === 'DESC' ? 'descending' : 'ascending';
-            return `'${col.name}' (${directionText})`;
-        }).filter(Boolean);
-
-        if (sortDescriptions.length > 0) {
-            prompt += `### Sorting Context:\n`;
-            prompt += `* **Pre-sorted Sequence**: The rows in 'Current Data for Target Table' above are already sorted in the following order: ${sortDescriptions.join(', ')}. You must process the rows and carry over the calculations sequentially from top to bottom based on this order.\n\n`;
+    prompt += `### Other Tables Data (for reference/lookup consistency):\n`;
+    Object.keys(allGeneratedData).forEach(pId => {
+        if (pId === table.id) return;
+        const rows = allGeneratedData[pId] || [];
+        if (rows.length > 0) {
+            prompt += `- Table ID '${pId}':\n`;
+            prompt += JSON.stringify(rows, null, 2) + '\n';
         }
+    });
+    prompt += '\n';
+
+    const sortDesc = getSortDescriptions(table);
+    if (sortDesc) {
+        prompt += `### Sequenced Evaluation Order:\n`;
+        prompt += `This table requires sequential evaluation along the keys: [${sortDesc}]. Calculate values row by row in this order, especially if values carry over.\n\n`;
     }
 
-    if (otherInstructions) {
-        prompt += `### User Rules & Requirements (IMPORTANT for matching calculations):\n`;
-        prompt += `* Instructions: "${otherInstructions}"\n`;
-        prompt += `* Make sure any calculated values (like dynamic totals, counts, or carry-overs) comply with these rules (e.g., if there are specific count limits or monthly limits, ensure calculations match the actual generated transaction count).\n\n`;
-    }
-    
     prompt += AI_PROMPT_DERIVATION_RULES;
-    
+    prompt += AI_PROMPT_DERIVATION_VERIFICATION_RULES;
     return prompt;
 };
 
 /**
- * 初期値設定用のプロンプトを構築する
+ * 初期値設定の指示を解析し、各テーブルに当てはまる初期レコードのJSON配列を出力させるプロンプトを構築する
  */
 export const buildInitialValueParsingPrompt = (tables: Table[], initialInstructions: string): string => {
-    let prompt = `You are an expert database administrator.\n`;
-    prompt += `Your task is to analyze the user's natural language instruction for setting up INITIAL values (like starting balances, categories, initial master values, etc.) and map them onto the appropriate table columns.\n\n`;
+    let prompt = `You are a database data extraction assistant. The user will provide natural language instructions about the initial records (seed data) that must exist in certain tables.\n\n`;
+    prompt += `Your task is to parse these instructions and construct a structured JSON object containing the initial rows for each relevant table.\n\n`;
     
-    prompt += `### Database Schema Definition:\n`;
+    prompt += `### Database Schema Definitions:\n`;
     tables.forEach(table => {
-        prompt += `- Table Name: '${table.name}' (ID: '${table.id}')\n`;
+        prompt += `- Table ID: '${table.id}', Name: '${table.name}'\n`;
         prompt += `  * Columns:\n`;
-        table.columns.forEach(col => {
-            const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+        table.columns.forEach(c => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === c.id);
             if (isVoParent) return;
 
-            const typeDesc = getColumnTypeDescription(col, tables);
-            prompt += `    - Column ID: '${col.id}', Physics Name: '${col.name}', Type: '${typeDesc}', PK: ${col.isPk}, FK: ${col.isFk}`;
-            if (col.description) {
-                prompt += `, Description: "${col.description}"`;
-            }
-            prompt += `\n`;
+            prompt += `    - Column ID: '${c.id}', Name: '${c.name}', Type: '${c.type}', PK: ${c.isPk}, FK: ${c.isFk}\n`;
         });
-        prompt += `\n`;
     });
-    
+    prompt += '\n';
+
     prompt += `### User Initial Value Instructions:\n`;
-    prompt += `"${initialInstructions}"\n\n`;
-    
-    prompt += `### Output Rules:\n`;
-    prompt += `1. Parse the user's request, identify which tables and columns should contain the initial/starting records.\n`;
+    prompt += `"""\n${initialInstructions}\n"""\n\n`;
+
+    prompt += `### Instructions for output:\n`;
+    prompt += `1. Analyze which tables are mentioned or implied in the user's instructions.\n`;
     prompt += `2. Formulate the initial rows. Use ONLY the table IDs as keys for the outer object, and column IDs as keys for each row object.\n`;
     prompt += `3. Set appropriate values matching the data types (e.g., numbers for INT, proper ISO dates YYYY-MM-DD for DATE, etc.).\n`;
     prompt += `4. Ensure referential integrity if the user sets values across multiple related tables (e.g., the FK column in table B must match the PK column in table A).\n`;
@@ -448,94 +381,75 @@ export const buildAllTablesPrompt = (
         }
     });
 
-    if (otherInstructions) {
-        prompt += `\n### User General Rules & Business Requirements:\n`;
-        prompt += `"${otherInstructions}"\n`;
+    if (otherInstructions && otherInstructions.trim() !== '') {
+        prompt += `### Special Instructions / Goals from User:\n`;
+        prompt += `"""\n${otherInstructions}\n"""\n\n`;
     }
 
-    prompt += `\n### Mock Data Generation Rules:\n`;
-    prompt += `1. If the user instructions specify specific generation rules, counts, or dates for a table, you MUST strictly follow them. For any main-view tables where the user does not specify generation rules, generate approximately ${rowCount} realistic rows (in addition to any pre-existing initial rows listed above) by default. Complying with database schemas, referential integrity constraints, uniqueness constraints, and evaluation/calculation rules remains your HIGHEST PRIORITY. You MUST automatically adjust the number of generated rows for any table if logically required to maintain consistent relationships or evaluation chains. Never compromise data integrity to fit default row limits.\n`;
-    prompt += `2. For any sub-view table (viewPane: 'sub'), do NOT generate any additional rows. You MUST only output the pre-existing rows provided for that table. If the sub-view table has no pre-existing rows, output an empty array for that table ID.\n`;
-    prompt += `3. You MUST maintain referential integrity. Child tables' foreign key columns MUST EXACTLY match one of the parent tables' primary key values generated in the same response or present in pre-existing rows.\n`;
-    prompt += `4. Maintain semantic consistency across tables (e.g. transaction dates, accounts, descriptions should align logically).\n`;
-    prompt += `5. Format the output JSON as an object mapping each Table ID to an array of row objects.\n`;
-
+    prompt += `### Rules for Generating Data:\n`;
+    prompt += `1. Output a JSON object mapping table IDs to their list of generated rows (similar structure as the input but with row data).\n`;
+    prompt += `2. For non-master tables, generate exactly ${rowCount} rows (excluding any pre-existing rows). If there are pre-existing rows, output them first, then generate ${rowCount} additional rows.\n`;
+    prompt += `3. Always ensure that the values in child tables' FK columns exactly match existing values in the parent tables' corresponding PK columns.\n`;
+    prompt += `4. Generate highly realistic, consistent mock values (e.g., real names, matching dates, logical amounts, valid sequential IDs).\n`;
+    
     return prompt;
 };
 
 /**
- * データベース全体のすべての導出項目を一括計算するためのプロンプトを構築する (ステップ2用)
+ * データベース全体の一括導出項目計算用のプロンプトを構築する (ステップ2用)
  */
 export const buildAllTablesDerivationPrompt = (
   tables: Table[], 
   allGeneratedData: Record<string, any[]>, 
   otherInstructions = ''
 ): string => {
-    let prompt = `You are a database engine. Your task is to calculate and populate all derived (dependent) column values for all tables in the database, ensuring perfect mathematical correctness and consistent values based on pre-existing raw data.\n\n`;
+    let prompt = `You are a database calculation engine. Your task is to compute and fill in all derived columns (dependent columns) in all tables sequentially, preserving consistency and carry-over logic.\n\n`;
 
-    prompt += `### Database Schema and Derivation Formulas:\n`;
+    prompt += `### Database Schema Definitions:\n`;
     tables.forEach(table => {
         prompt += `- Table: '${table.name}' (ID: '${table.id}')\n`;
         if (table.description && table.description.trim() !== '') {
             prompt += `  * Table Business Rules: "${table.description}"\n`;
         }
-        const depCols = table.columns.filter(c => c.attributeType === 'dependent' && !table.columns.some(x => x.parentColumnId === c.id));
-        if (depCols.length > 0) {
-            prompt += `  * Derived Columns & Calculation Formulas:\n`;
-            depCols.forEach(col => {
-                prompt += `    - Column ID: '${col.id}', Physics Name: '${col.name}': Formula is [${col.derivation || ''}]\n`;
-            });
-        }
+        prompt += `  * Columns:\n`;
+        table.columns.forEach(c => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === c.id);
+            if (isVoParent) return;
 
-        if (table.orderBy && table.orderBy.type) {
-            let sortKeys: any[] = [];
-            if (table.orderBy.keys && table.orderBy.keys.length > 0) {
-                sortKeys = table.orderBy.keys;
-            } else {
-                let sortColIds: string[] = [];
-                if (table.orderBy.type === 'pk') {
-                    sortColIds = table.columns.filter(c => c.isPk).map(c => c.id);
-                } else if (table.orderBy.type === 'uq' && table.orderBy.uqId) {
-                    const targetUq = table.uniqueKeys?.find(uq => uq.id === table.orderBy!.uqId);
-                    sortColIds = targetUq ? (targetUq.columnIds || []) : [];
-                }
-                const defaultDir = table.orderBy.direction || 'ASC';
-                sortKeys = sortColIds.map(cid => ({
-                    columnId: cid,
-                    direction: table.orderBy!.directions?.[cid] || defaultDir
-                }));
+            const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(c.id));
+            prompt += `    - Column ID: '${c.id}', Physics Name: '${c.name}', Type: '${c.type}', PK: ${c.isPk}, UQ: ${isColUnique}, FK: ${c.isFk}`;
+            if (c.attributeType === 'dependent') {
+                prompt += `, (DERIVED) Formula: [${c.derivation || ''}]`;
             }
-
-            const sortDescriptions = sortKeys.map(keyInfo => {
-                const col = table.columns.find(c => c.id === keyInfo.columnId);
-                if (!col) return '';
-                const directionText = keyInfo.direction === 'DESC' ? 'descending' : 'ascending';
-                return `'${col.name}' (${directionText})`;
-            }).filter(Boolean);
-
-            if (sortDescriptions.length > 0) {
-                prompt += `  * Sorting/Calculation Sequence (IMPORTANT): You MUST process the rows of this table sequentially in this order: ${sortDescriptions.join(', ')}. Carry over any running totals (e.g. transaction balances, monthly summaries) step-by-step from top to bottom based on this order.\n`;
+            if (c.description) {
+                prompt += `, Description/Instruction: "${c.description}"`;
             }
+            prompt += '\n';
+        });
+
+        const sortDesc = getSortDescriptions(table);
+        if (sortDesc) {
+            prompt += `  * Evaluation Sequence: Order by [${sortDesc}]. Compute derived fields sequentially in this row order.\n`;
         }
         prompt += '\n';
     });
 
-    prompt += `### Current Database Mock Data (derived columns are empty or incomplete):\n`;
+    prompt += `### Input Data (Rows with empty or draft derived values):\n`;
     tables.forEach(table => {
-        prompt += `- Table Name: '${table.name}' (ID: '${table.id}'):\n`;
-        prompt += JSON.stringify(allGeneratedData[table.id] || [], null, 2) + `\n\n`;
+        const rows = allGeneratedData[table.id] || [];
+        prompt += `- Table ID '${table.id}' (${table.name}) rows:\n`;
+        prompt += JSON.stringify(rows, null, 2) + '\n\n';
     });
 
-    if (otherInstructions) {
-        prompt += `### User Rules & Requirements:\n`;
-        prompt += `* Instructions: "${otherInstructions}"\n\n`;
+    if (otherInstructions && otherInstructions.trim() !== '') {
+        prompt += `### Additional Instructions:\n"""\n${otherInstructions}\n"""\n\n`;
     }
 
-    prompt += `### Instructions for Calculations:\n`;
-    prompt += `1. You MUST calculate the derived values for all tables. Do NOT change, insert, or delete any of the existing raw data values (such as transaction amounts, names, or dates). Just compute and fill in the missing derived values.\n`;
-    prompt += `2. Pay extreme attention to sequential running totals (like '口座残高', '月初残高', '月末残高'). You must calculate them progressively based on the specified sort order (e.g. sorting by time or年月). Ensure that previous row's final balance properly becomes the current row's starting balance.\n`;
-    prompt += `\n### Verification and Output Process (CRITICAL):\n`;
-    prompt += AI_PROMPT_DERIVATION_VERIFICATION_RULES;
+    prompt += `### Rules for Computation:\n`;
+    prompt += `1. Compute all derived values for each row in each table. Ensure calculations strictly adhere to the business rules and derivation formulas.\n`;
+    prompt += `2. If a derived column depends on values from another table (e.g. sum of hours from details), perform a relational lookup/aggregate based on the FK relations.\n`;
+    prompt += `3. If a derived column carries over values (e.g. balance) along the evaluation order, compute it sequentially row by row.\n`;
+    prompt += `4. Return a JSON object mapping table IDs to their list of rows, with all derived columns fully computed.\n`;
 
     return prompt;
 };

@@ -87,9 +87,6 @@ export const TableNode: React.FC<TableNodeProps> = ({
                             <th className="px-2 py-1.5 border-b border-gray-200 w-8 text-center text-gray-400">#</th>
                             {getVisibleColumns(table).map(col => {
                                 const isDependent = col.attributeType === 'dependent';
-                                const refTable = col.reference?.tableId ? tables.find(t => t.id === col.reference?.tableId) : null;
-                                const refCol = refTable?.columns.find(c => c.id === col.reference?.columnId);
-                                const refLabel = refTable && refCol ? `${refTable.name}.${refCol.name}` : '';
                                 const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(col.id));
 
                                 return (
@@ -98,7 +95,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
                                         className={`px-2 py-1.5 border-b border-gray-200 border-l border-gray-100 min-w-[80px] ${isDependent ? 'bg-orange-50/50 text-orange-800' : ''}`}
                                         title={
                                             isDependent ? `導出項目: ${col.derivation}` : 
-                                            col.isFk && refLabel ? `参照先: ${refLabel}` : "独立項目"
+                                            col.isFk ? "外部キー" : "独立項目"
                                         }
                                     >
                                         <div className="flex items-center gap-1.5">

@@ -32,37 +32,38 @@ export const syncRelationshipsWithTables = (
   currentTables: Table[], 
   currentRelationships: Relationship[]
 ): Relationship[] => {
-  const newRelationships: Relationship[] = [];
+  const validRelationships: Relationship[] = [];
   
-  currentTables.forEach(table => {
-    table.columns.forEach(col => {
-      if (col.isFk && col.reference?.tableId && col.reference?.columnId) {
-        const parentTable = currentTables.find(t => t.id === col.reference?.tableId);
-        
-        if (parentTable && parentTable.id !== table.id) {
-          const type = col.isPk ? 'identifying' : 'non_identifying';
-          
-          const existingRel = findExistingRelationship(
-            currentRelationships,
-            parentTable.id,
-            table.id,
-            col.id
-          );
+  currentRelationships.forEach(rel => {
+    const parentTable = currentTables.find(t => t.id === rel.from);
+    const childTable = currentTables.find(t => t.id === rel.to);
+    if (parentTable && childTable) {
+      // 親テーブル・子テーブル双方にマッピング対象のカラムが実在するもののみを抽出
+      const validMappings = rel.mappings ? rel.mappings.filter(m => {
+        const pCol = parentTable.columns.find(c => c.id === m.parentColId);
+        const cCol = childTable.columns.find(c => c.id === m.childColId);
+        return pCol && cCol;
+      }) : [];
+      
+      // 既存の rel.type が指定されている場合はそれを維持し、未指定の場合のみ自動的にデフォルト判定を行う
+      const hasPkMapping = validMappings.some(m => {
+        const cCol = childTable.columns.find(c => c.id === m.childColId);
+        return cCol?.isPk;
+      });
+      const defaultType = hasPkMapping ? 'identifying' : 'non_identifying';
+      const type = rel.type || defaultType;
 
-          newRelationships.push({
-            id: existingRel ? existingRel.id : `rel_${parentTable.id}_${table.id}_${col.id}`,
-            from: parentTable.id,
-            to: table.id,
-            type: type,
-            mappings: existingRel ? (existingRel.mappings || []) : []
-          });
-        }
-      }
-    });
+      validRelationships.push({
+        ...rel,
+        type: type,
+        mappings: validMappings
+      });
+    }
   });
 
+  // ID重複の排除
   const relMap = new Map<string, Relationship>();
-  newRelationships.forEach(rel => {
+  validRelationships.forEach(rel => {
     const key = rel.id; 
     if (relMap.has(key)) {
       if (rel.type === 'identifying') {
@@ -109,15 +110,12 @@ export const syncTableColumnsWithRelationships = (
 ): Table[] => {
   return tables.map(table => {
     const childRels = relationships.filter(r => r.to === table.id && r.from && r.mappings);
-    const mappedCols = new Map<string, { tableId: string; columnId: string }>();
+    const mappedCols = new Set<string>();
 
     childRels.forEach(rel => {
       rel.mappings.forEach(m => {
         if (m.childColId) {
-          mappedCols.set(m.childColId, {
-            tableId: rel.from,
-            columnId: m.parentColId || ''
-          });
+          mappedCols.add(m.childColId);
         }
       });
     });
@@ -130,25 +128,15 @@ export const syncTableColumnsWithRelationships = (
       if (parentColIds.has(col.id)) {
         return {
           ...col,
-          isFk: false,
-          reference: undefined
+          isFk: false
         };
       }
 
-      const fkInfo = mappedCols.get(col.id);
-      if (fkInfo) {
-        return {
-          ...col,
-          isFk: true,
-          reference: fkInfo
-        };
-      } else {
-        return {
-          ...col,
-          isFk: false,
-          reference: undefined
-        };
-      }
+      const isFk = mappedCols.has(col.id);
+      return {
+        ...col,
+        isFk: isFk
+      };
     });
 
     return { ...table, columns: updatedColumns };

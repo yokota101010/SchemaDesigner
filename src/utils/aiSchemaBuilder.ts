@@ -1,9 +1,23 @@
-import { Table } from '../domain/models';
+import { Table, Relationship } from '../domain/models';
+
+/**
+ * 関連線（relationships）から指定された外部キーカラムの親テーブルおよび親カラム情報を逆引き解決する
+ */
+const getFkReference = (colId: string, tableId: string, relationships: Relationship[]) => {
+  const rel = relationships.find(r => r.to === tableId && r.mappings?.some(m => m.childColId === colId));
+  if (rel) {
+    const mapping = rel.mappings?.find(m => m.childColId === colId);
+    if (mapping) {
+      return { tableId: rel.from, columnId: mapping.parentColId || '' };
+    }
+  }
+  return undefined;
+};
 
 /**
  * 単一のテーブル定義に基づいて Gemini API 用の動的 JSON Schema を構築する (第1段階用)
  */
-export const buildSingleTableResponseSchema = (table: Table, parentData: Record<string, any[]> = {}, includeDependent = false): any => {
+export const buildSingleTableResponseSchema = (table: Table, parentData: Record<string, any[]> = {}, includeDependent = false, relationships: Relationship[] = []): any => {
     const columnProps: Record<string, any> = {};
     const tableUqs = table.uniqueKeys || [];
     
@@ -20,12 +34,13 @@ export const buildSingleTableResponseSchema = (table: Table, parentData: Record<
         const isColUnique = tableUqs.some(uq => uq.columnIds?.includes(col.id));
         if (isColUnique) desc += ' [Unique constraint]';
         if (col.isFk) {
-            const parentTableId = col.reference?.tableId;
+            const ref = getFkReference(col.id, table.id, relationships);
+            const parentTableId = ref?.tableId;
             desc += ` [Foreign Key referencing tableId: '${parentTableId || ''}']`;
             
-            if (parentTableId && parentData[parentTableId]) {
+            if (parentTableId && parentData[parentTableId] && ref) {
                 const parentKeys = parentData[parentTableId]
-                    .map(row => row[col.reference!.columnId])
+                    .map(row => row[ref.columnId])
                     .filter(Boolean);
                 if (parentKeys.length > 0) {
                     desc += ` MUST BE EXACTLY ONE OF THESE VALUES: ${JSON.stringify(parentKeys)}`;
@@ -69,7 +84,7 @@ export const buildSingleTableResponseSchema = (table: Table, parentData: Record<
 /**
  * 第2段階用のレスポンススキーマを構築する (すべてのカラムを必須で返してもらう)
  */
-export const buildSingleTableDerivationSchema = (table: Table, allGeneratedData: Record<string, any[]> = {}): any => {
+export const buildSingleTableDerivationSchema = (table: Table, allGeneratedData: Record<string, any[]> = {}, relationships: Relationship[] = []): any => {
     const columnProps: Record<string, any> = {};
     table.columns.forEach(col => {
         const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
@@ -77,12 +92,13 @@ export const buildSingleTableDerivationSchema = (table: Table, allGeneratedData:
 
         let desc = `Value for column '${col.name}' (${col.type})`;
         if (col.isFk) {
-            const parentTableId = col.reference?.tableId;
+            const ref = getFkReference(col.id, table.id, relationships);
+            const parentTableId = ref?.tableId;
             desc += ` [Foreign Key referencing tableId: '${parentTableId || ''}']`;
             
-            if (parentTableId && allGeneratedData[parentTableId]) {
+            if (parentTableId && allGeneratedData[parentTableId] && ref) {
                 const parentKeys = allGeneratedData[parentTableId]
-                    .map(row => row[col.reference!.columnId])
+                    .map(row => row[ref.columnId])
                     .filter(value => value !== undefined && value !== null && value !== "");
                 if (parentKeys.length > 0) {
                     desc += ` MUST BE EXACTLY ONE OF THESE VALUES: ${JSON.stringify(parentKeys)}`;
@@ -158,7 +174,7 @@ export const buildInitialValueParsingSchema = (tables: Table[]): any => {
 /**
  * 全テーブルを一括生成するための Gemini API 用 JSON Schema を構築する (ステップ1用)
  */
-export const buildAllTablesResponseSchema = (tables: Table[]): any => {
+export const buildAllTablesResponseSchema = (tables: Table[], relationships: Relationship[] = []): any => {
     const tableProps: Record<string, any> = {};
 
     tables.forEach(table => {
@@ -174,8 +190,9 @@ export const buildAllTablesResponseSchema = (tables: Table[]): any => {
             if (col.description) desc += ` [Business Rule/Instruction: ${col.description}]`;
             if (col.isPk) desc += ' [Primary Key - MUST BE UNIQUE]';
             if (col.isFk) {
-                const parentTableId = col.reference?.tableId;
-                desc += ` [Foreign Key referencing tableId: '${parentTableId || ''}', columnId: '${col.reference?.columnId || ''}']`;
+                const ref = getFkReference(col.id, table.id, relationships);
+                const parentTableId = ref?.tableId;
+                desc += ` [Foreign Key referencing tableId: '${parentTableId || ''}', columnId: '${ref?.columnId || ''}']`;
             }
 
             columnProps[col.id] = {
@@ -215,7 +232,7 @@ export const buildAllTablesResponseSchema = (tables: Table[]): any => {
 /**
  * 全テーブルの一括導出計算用の JSON Schema を構築する (ステップ2用)
  */
-export const buildAllTablesDerivationSchema = (tables: Table[]): any => {
+export const buildAllTablesDerivationSchema = (tables: Table[], relationships: Relationship[] = []): any => {
     const tableProps: Record<string, any> = {};
 
     tables.forEach(table => {
@@ -230,7 +247,8 @@ export const buildAllTablesDerivationSchema = (tables: Table[]): any => {
                 desc += ` [Derived using formula: ${col.derivation || ''}]`;
             }
             if (col.isFk) {
-                const parentTableId = col.reference?.tableId;
+                const ref = getFkReference(col.id, table.id, relationships);
+                const parentTableId = ref?.tableId;
                 desc += ` [Foreign Key referencing tableId: '${parentTableId || ''}']`;
             }
 
@@ -241,13 +259,23 @@ export const buildAllTablesDerivationSchema = (tables: Table[]): any => {
         });
 
         tableProps[table.id] = {
-            type: 'array',
-            description: `List of rows for table '${table.name}' with derived values filled in`,
-            items: {
-                type: 'object',
-                properties: columnProps,
-                required: table.columns.filter(col => !table.columns.some(x => x.parentColumnId === col.id)).map(col => col.id)
-            }
+            type: 'object',
+            properties: {
+                calculation_steps: {
+                    type: 'string',
+                    description: `Step-by-step mathematical explanation of how you computed the derived columns for each row in table '${table.name}'. Must be detailed and show values and formulas.`
+                },
+                rows: {
+                    type: 'array',
+                    description: `List of rows for table '${table.name}' with derived values filled in`,
+                    items: {
+                        type: 'object',
+                        properties: columnProps,
+                        required: table.columns.filter(col => !table.columns.some(x => x.parentColumnId === col.id)).map(col => col.id)
+                    }
+                }
+            },
+            required: ['calculation_steps', 'rows']
         };
     });
 

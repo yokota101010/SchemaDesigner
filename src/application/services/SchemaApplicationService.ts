@@ -150,23 +150,16 @@ export class SchemaApplicationService implements SchemaUseCase {
             updatedCols = updatedCols.filter(c => c.parentColumnId !== colId);
             
             if (value.startsWith('FK:')) {
-              const refTableId = value.substring(3);
-              const refTable = tables.find(t => t.id === refTableId);
-              const refPkCol = refTable?.columns.find(c => c.isPk);
-              if (refPkCol) {
-                updatedCols = updatedCols.map(c => c.id === colId ? {
-                  ...c,
-                  type: value,
-                  isFk: true,
-                  reference: { tableId: refTableId, columnId: refPkCol.id }
-                } : c);
-              }
+              updatedCols = updatedCols.map(c => c.id === colId ? {
+                ...c,
+                type: value,
+                isFk: true
+              } : c);
             } else {
               updatedCols = updatedCols.map(c => c.id === colId ? {
                 ...c,
                 type: value,
-                isFk: false,
-                reference: undefined
+                isFk: false
               } : c);
 
               const voPreset = valueObjects.find(vo => vo.name === value);
@@ -221,8 +214,7 @@ export class SchemaApplicationService implements SchemaUseCase {
               ...c,
               attributeType: 'independent',
               derivation: '',
-              isFk: false,
-              reference: undefined
+              isFk: false
             };
           }
           return c;
@@ -236,7 +228,57 @@ export class SchemaApplicationService implements SchemaUseCase {
     let nextRels = relationships;
     if (field === 'type') {
       const cleanedRels = cleanRelationshipsForValueObjects(nextTables, relationships);
-      nextRels = syncRelationshipsWithTables(nextTables, cleanedRels);
+      
+      if (value.startsWith('FK:')) {
+        const refTableId = value.substring(3);
+        const refTable = nextTables.find(t => t.id === refTableId);
+        const refPkCol = refTable?.columns.find(c => c.isPk);
+        const childTable = nextTables.find(t => t.columns.some(c => c.id === colId));
+        
+        if (refTable && refPkCol && childTable && refTable.id !== childTable.id) {
+          const existingRel = cleanedRels.find(r => r.from === refTable.id && r.to === childTable.id);
+          
+          if (existingRel) {
+            const hasMapping = existingRel.mappings?.some(m => m.childColId === colId);
+            if (!hasMapping) {
+              nextRels = cleanedRels.map(r => {
+                if (r.id === existingRel.id) {
+                  return {
+                    ...r,
+                    mappings: [...(r.mappings || []), { parentColId: refPkCol.id, childColId: colId }]
+                  };
+                }
+                return r;
+              });
+            }
+          } else {
+            const isPk = childTable.columns.find(c => c.id === colId)?.isPk;
+            const type = isPk ? 'identifying' : 'non_identifying';
+            const newRelId = `rel_${refTable.id}_${childTable.id}_${colId}`;
+            nextRels = [
+              ...cleanedRels,
+              {
+                id: newRelId,
+                from: refTable.id,
+                to: childTable.id,
+                type: type,
+                mappings: [{ parentColId: refPkCol.id, childColId: colId }]
+              }
+            ];
+          }
+        }
+      } else {
+        // 型が 'FK:' 以外に変更された場合、このカラムに関するマッピングを relationships から削除する
+        nextRels = cleanedRels.map(r => {
+          if (r.mappings) {
+            return {
+              ...r,
+              mappings: r.mappings.filter(m => m.childColId !== colId)
+            };
+          }
+          return r;
+        }).filter(r => r.mappings && r.mappings.length > 0);
+      }
     }
     
     nextTables = syncTableColumnsWithRelationships(nextTables, nextRels);
@@ -267,26 +309,7 @@ export class SchemaApplicationService implements SchemaUseCase {
     });
   }
 
-  updateColumnReference(tableId: string, colId: string, key: string, value: any, tables: Table[]): Table[] {
-    return tables.map(t => {
-      if (t.id === tableId) {
-        return {
-          ...t,
-          columns: t.columns.map(c => {
-            if (c.id === colId) {
-              const newReference = { ...c.reference, [key]: value } as any;
-              if (key === 'tableId') {
-                newReference.columnId = '';
-              }
-              return { ...c, reference: newReference };
-            }
-            return c;
-          })
-        };
-      }
-      return t;
-    });
-  }
+
 
   addRow(tableId: string, tables: Table[]): Table[] {
     return tables.map(t => {
@@ -483,7 +506,6 @@ export class SchemaApplicationService implements SchemaUseCase {
             isPk: c.isPk,
             isUnique: c.isUnique,
             isFk: c.isFk,
-            reference: c.reference,
             attributeType: c.attributeType,
             derivation: c.derivation,
             isVisible: c.isVisible
@@ -501,8 +523,7 @@ export class SchemaApplicationService implements SchemaUseCase {
             ...col,
             attributeType: 'independent',
             derivation: '',
-            isFk: false,
-            reference: undefined
+            isFk: false
           });
 
           voPreset.properties.forEach((prop: ValueObjectPropertyPreset) => {
@@ -511,7 +532,6 @@ export class SchemaApplicationService implements SchemaUseCase {
 
             let propType = prop.type;
             let isFk = backup?.isFk ?? false;
-            let reference = backup?.reference;
 
             if (prop.type.startsWith('FK:')) {
               const refTableId = prop.type.substring(3);
@@ -520,7 +540,6 @@ export class SchemaApplicationService implements SchemaUseCase {
               if (refPkCol) {
                 propType = refPkCol.type;
                 isFk = true;
-                reference = { tableId: refTableId, columnId: refPkCol.id };
               }
             }
 
@@ -537,8 +556,7 @@ export class SchemaApplicationService implements SchemaUseCase {
               description: prop.description,
               parentColumnId: col.id,
               isVoProperty: true,
-              voPropertyName: prop.name,
-              reference: reference
+              voPropertyName: prop.name
             });
           });
         } else {
@@ -553,6 +571,16 @@ export class SchemaApplicationService implements SchemaUseCase {
     const nextRels = syncRelationshipsWithTables(nextTables, cleanedRels);
     const syncedTables = syncTableColumnsWithRelationships(nextTables, nextRels);
 
+    return {
+      tables: syncedTables,
+      relationships: nextRels
+    };
+  }
+
+  syncRelationships(tables: Table[], relationships: Relationship[]): { tables: Table[], relationships: Relationship[] } {
+    const cleanedRels = cleanRelationshipsForValueObjects(tables, relationships);
+    const nextRels = syncRelationshipsWithTables(tables, cleanedRels);
+    const syncedTables = syncTableColumnsWithRelationships(tables, nextRels);
     return {
       tables: syncedTables,
       relationships: nextRels

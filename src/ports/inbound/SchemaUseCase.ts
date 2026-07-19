@@ -22,7 +22,7 @@ export interface SchemaUseCase {
     valueObjects: ValueObjectPreset[]
   ): { tables: Table[], relationships: Relationship[] };
   moveColumn(tableId: string, colId: string, direction: 'up' | 'down', tables: Table[]): Table[];
-  updateColumnReference(tableId: string, colId: string, key: string, value: any, tables: Table[]): Table[];
+
   
   addRow(tableId: string, tables: Table[]): Table[];
   deleteRow(tableId: string, rowId: string, tables: Table[]): Table[];
@@ -41,4 +41,5 @@ export interface SchemaUseCase {
   toggleUniqueKeyMapping(tableId: string, uqId: string, colId: string, isChecked: boolean, tables: Table[]): Table[];
   
   updateValueObjects(newVOs: ValueObjectPreset[], tables: Table[], relationships: Relationship[]): { tables: Table[], relationships: Relationship[] };
+  syncRelationships(tables: Table[], relationships: Relationship[]): { tables: Table[], relationships: Relationship[] };
 }

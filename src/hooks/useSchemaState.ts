@@ -15,14 +15,13 @@ export const useSchemaState = (
   const [connectionMode, setConnectionMode] = useState<{ fromId: string } | null>(null); 
   const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
 
-  const autoUpdateRelationshipType = useCallback((currentTables: Table[]) => {
-      // 内部的には SchemaUseCase 経由でリレーションシップ同期を実行
-      const { relationships: nextRels } = schemaUseCase.updateColumn(
-        '', '', 'isPk', false, // 影響のないダミー値で同期計算だけをトリガー
-        currentTables, relationships, valueObjects
-      );
+  const syncRelationships = useCallback((currentTables: Table[], currentRels: Relationship[]) => {
+      const { tables: nextTables, relationships: nextRels } = schemaUseCase.syncRelationships(currentTables, currentRels);
+      setTables(nextTables);
       setRelationships(nextRels);
-  }, [relationships, valueObjects, schemaUseCase]);
+  }, [schemaUseCase]);
+
+
 
   const updateTableViewPane = useCallback((tableId: string, viewPane: 'main' | 'sub') => {
     const nextTables = schemaUseCase.updateTableViewPane(tableId, viewPane, tables);
@@ -104,10 +103,7 @@ export const useSchemaState = (
     setTables(nextTables);
   }, [tables, schemaUseCase]);
 
-  const updateColumnReference = useCallback((tableId: string, colId: string, key: string, value: any) => {
-    const nextTables = schemaUseCase.updateColumnReference(tableId, colId, key, value, tables);
-    setTables(nextTables);
-  }, [tables, schemaUseCase]);
+
 
   // --- Row Operations ---
   const addRow = useCallback((tableId: string) => {
@@ -213,12 +209,12 @@ export const useSchemaState = (
     editingTableId, setEditingTableId,
     connectionMode, setConnectionMode,
     selectedRelId, setSelectedRelId,
-    autoUpdateRelationshipType,
+    syncRelationships,
     addTable, deleteTable, initiateDeleteTable,
     updateTableName, updateTableDescription, updateTableOrderBy, toggleTableMinimize,
     updateTableViewPane,
     alignSubTables,
-    addColumn, deleteColumn, updateColumn, updateColumnReference,
+    addColumn, deleteColumn, updateColumn,
     moveColumn,
     addRow, deleteRow, updateRowValue,
     startConnectionMode, handleConnect, deleteRelationship,
