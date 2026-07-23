@@ -197,11 +197,6 @@ export const useSchemaState = (
     setRelationships(nextRels);
   }, [tables, relationships, schemaUseCase]);
 
-  const alignSubTables = useCallback(() => {
-    const nextTables = schemaUseCase.alignSubTables(tables);
-    setTables(nextTables);
-  }, [tables, schemaUseCase]);
-
   return {
     tables, setTables,
     relationships, setRelationships,
@@ -213,7 +208,6 @@ export const useSchemaState = (
     addTable, deleteTable, initiateDeleteTable,
     updateTableName, updateTableDescription, updateTableOrderBy, toggleTableMinimize,
     updateTableViewPane,
-    alignSubTables,
     addColumn, deleteColumn, updateColumn,
     moveColumn,
     addRow, deleteRow, updateRowValue,

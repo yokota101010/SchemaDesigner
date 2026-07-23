@@ -22,14 +22,13 @@ interface CanvasProps {
     deleteRow: (tableId: string, rowId: string) => void;
     activeTab: 'main' | 'sub';
     setActiveTab: (tab: 'main' | 'sub') => void;
-    onAlignSubTables: () => void;
 }
 
 export const Canvas: React.FC<CanvasProps> = ({
     canvasRef, handleDragStart, isPanning, viewOffset, isLoading,
     relationships, tables, connectionMode, setConnectionMode,
     addRow, setEditingTableId, initiateDeleteTable, toggleTableMinimize,
-    updateRowValue, deleteRow, activeTab, setActiveTab, onAlignSubTables
+    updateRowValue, deleteRow, activeTab, setActiveTab
 }) => {
     // 表示中テーブルとリレーションシップのフィルタリング
     const visibleTables = tables.filter(t => activeTab === 'sub' ? t.viewPane === 'sub' : t.viewPane !== 'sub');
@@ -63,7 +62,7 @@ export const Canvas: React.FC<CanvasProps> = ({
                 onTouchStart={(e) => e.stopPropagation()}
                 className="absolute top-4 left-4 bg-white/95 backdrop-blur border border-gray-200 p-0.5 rounded-lg shadow-lg flex items-center gap-1.5 z-30 select-none"
             >
-                <div className={`flex gap-0.5 ${activeTab === 'sub' ? 'border-r border-gray-200 pr-1.5' : ''}`}>
+                <div className="flex gap-0.5">
                     <button
                         onClick={() => setActiveTab('main')}
                         className={`px-4 py-1.5 rounded-md font-bold text-xs transition-all duration-150 cursor-pointer ${activeTab === 'main' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'}`}
@@ -77,16 +76,6 @@ export const Canvas: React.FC<CanvasProps> = ({
                         サブビュー
                     </button>
                 </div>
-                {activeTab === 'sub' && (
-                    <button
-                        onClick={onAlignSubTables}
-                        className="px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100 rounded-md font-bold text-xs transition-all duration-150 cursor-pointer flex items-center gap-1 shadow-sm mr-1 animate-in fade-in zoom-in-95 duration-200"
-                        title="サブペインのテーブルを名前順で綺麗に整列します"
-                    >
-                        <span>🧹</span>
-                        <span>自動整列</span>
-                    </button>
-                )}
             </div>
 
             <RelationshipLines 

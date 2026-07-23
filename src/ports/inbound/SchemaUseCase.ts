@@ -8,7 +8,6 @@ export interface SchemaUseCase {
   updateTableOrderBy(tableId: string, orderBy: OrderBy, tables: Table[]): Table[];
   toggleTableMinimize(tableId: string, tables: Table[]): Table[];
   updateTableViewPane(tableId: string, viewPane: 'main' | 'sub', tables: Table[]): Table[];
-  alignSubTables(tables: Table[]): Table[];
   
   addColumn(tableId: string, tables: Table[]): Table[];
   deleteColumn(tableId: string, colId: string, tables: Table[], relationships: Relationship[]): { tables: Table[], relationships: Relationship[] };

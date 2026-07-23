@@ -89,18 +89,23 @@ export const TableNode: React.FC<TableNodeProps> = ({
                                 const isDependent = col.attributeType === 'dependent';
                                 const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(col.id));
 
+                                const titleParts: string[] = [];
+                                if (col.isPk) titleParts.push("主キー(PK)");
+                                if (isColUnique) titleParts.push("ユニークキー(UK)");
+                                if (col.isFk) titleParts.push("外部キー(FK)");
+                                if (isDependent) titleParts.push(`導出項目: ${col.derivation}`);
+                                if (titleParts.length === 0) titleParts.push("独立項目");
+                                const titleText = titleParts.join(", ");
+
                                 return (
                                     <th 
                                         key={col.id} 
                                         className={`px-2 py-1.5 border-b border-gray-200 border-l border-gray-100 min-w-[80px] ${isDependent ? 'bg-orange-50/50 text-orange-800' : ''}`}
-                                        title={
-                                            isDependent ? `導出項目: ${col.derivation}` : 
-                                            col.isFk ? "外部キー" : "独立項目"
-                                        }
+                                        title={titleText}
                                     >
                                         <div className="flex items-center gap-1.5">
                                             {col.isPk && <Key className="w-3 h-3 text-yellow-500 flex-shrink-0" />}
-                                            {isColUnique && !col.isPk && <KeyRound className="w-3 h-3 text-purple-500 flex-shrink-0" />}
+                                            {isColUnique && <KeyRound className="w-3 h-3 text-purple-500 flex-shrink-0" />}
                                             {col.isFk && <LinkIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />}
                                             {isDependent && <FunctionSquare className="w-3 h-3 text-orange-500 flex-shrink-0" />}
                                             <span>{col.name}</span>

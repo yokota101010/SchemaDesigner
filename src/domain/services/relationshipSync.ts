@@ -45,13 +45,14 @@ export const syncRelationshipsWithTables = (
         return pCol && cCol;
       }) : [];
       
-      // 既存の rel.type が指定されている場合はそれを維持し、未指定の場合のみ自動的にデフォルト判定を行う
-      const hasPkMapping = validMappings.some(m => {
+      // マッピングされた子カラムの中にPK(isPk: true)またはUK(uniqueKeys)が含まれていれば 'identifying'、なければ 'non_identifying' へ動的に決定
+      const rawMappings = rel.mappings || [];
+      const hasPkOrUkMapping = rawMappings.some(m => {
         const cCol = childTable.columns.find(c => c.id === m.childColId);
-        return cCol?.isPk;
+        const isUk = childTable.uniqueKeys?.some(uq => uq.columnIds?.includes(m.childColId));
+        return cCol && (cCol.isPk || isUk);
       });
-      const defaultType = hasPkMapping ? 'identifying' : 'non_identifying';
-      const type = rel.type || defaultType;
+      const type = hasPkOrUkMapping ? 'identifying' : 'non_identifying';
 
       validRelationships.push({
         ...rel,

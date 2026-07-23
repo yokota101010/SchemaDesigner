@@ -86,7 +86,7 @@ function SchemaDesigner() {
       editingTableId, setEditingTableId, connectionMode, setConnectionMode,
       selectedRelId, setSelectedRelId, syncRelationships,
       addTable, deleteTable, initiateDeleteTable, updateTableName, updateTableDescription, updateTableOrderBy,
-      toggleTableMinimize, updateTableViewPane, alignSubTables, addColumn, deleteColumn, updateColumn,
+      toggleTableMinimize, updateTableViewPane, addColumn, deleteColumn, updateColumn,
       moveColumn, addRow, deleteRow, updateRowValue,
       startConnectionMode, handleConnect, deleteRelationship,
       addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol,
@@ -481,7 +481,7 @@ function SchemaDesigner() {
   const editingTable = tables.find(t => t.id === editingTableId) || null;
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 text-slate-800 font-sans overflow-hidden text-xs">
+    <div className="flex flex-col h-screen h-[100dvh] bg-gray-50 text-slate-800 font-sans overflow-hidden text-xs overscroll-none">
       <Header 
         projectName={projectName} setProjectName={setProjectName}
         handleNewProject={handleNewProject} handleImportClick={handleImportClick}
@@ -510,7 +510,6 @@ function SchemaDesigner() {
         deleteRow={deleteRow}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onAlignSubTables={alignSubTables}
       />
 
 

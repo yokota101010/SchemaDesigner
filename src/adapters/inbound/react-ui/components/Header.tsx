@@ -22,7 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
     onAiGenerateData, onOpenAiSettings, onOpenValueObjectSettings
 }) => {
     return (
-        <div className="bg-white border-b border-gray-200 px-3 py-2 shadow-sm flex items-center justify-between z-20 h-12">
+        <div className="bg-white border-b border-gray-200 px-3 py-2 shadow-sm flex items-center justify-between z-30 h-12 sticky top-0 flex-shrink-0 overflow-x-auto min-w-0">
             <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                     <Database className="w-5 h-5 text-blue-600" />
@@ -84,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
                         title="AI・APIキー設定"
                     >
                         <Settings className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="hidden sm:inline">APIキー設定</span>
+                        <span className="hidden sm:inline">APIキー</span>
                     </button>
 
                     <button 
@@ -93,7 +93,7 @@ export const Header: React.FC<HeaderProps> = ({
                         title="AIでサンプルデータ自動生成"
                     >
                         <Workflow className="w-3.5 h-3.5" />
-                        <span>AIサンプル生成</span>
+                        <span>AIサンプル</span>
                     </button>
                 </div>
 
@@ -108,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
                         title="値オブジェクト定義"
                     >
                         <Workflow className="w-3.5 h-3.5 text-purple-600" />
-                        <span className="hidden sm:inline">値オブジェクト設定</span>
+                        <span className="hidden sm:inline">値オブジェクト</span>
                     </button>
 
                     <button 
@@ -131,7 +131,7 @@ export const Header: React.FC<HeaderProps> = ({
                     title="新規テーブルの追加"
                 >
                     <Plus className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">テーブル追加</span>
+                    <span>テーブル追加</span>
                 </button>
 
 

@@ -61,10 +61,6 @@ export class SchemaApplicationService implements SchemaUseCase {
     return tables.map(t => t.id === tableId ? { ...t, viewPane } : t);
   }
 
-  alignSubTables(tables: Table[]): Table[] {
-    return calculateAlignSubTablesPlacements(tables);
-  }
-
   addColumn(tableId: string, tables: Table[]): Table[] {
     return tables.map(t => {
       if (t.id === tableId) {
@@ -252,8 +248,10 @@ export class SchemaApplicationService implements SchemaUseCase {
               });
             }
           } else {
-            const isPk = childTable.columns.find(c => c.id === colId)?.isPk;
-            const type = isPk ? 'identifying' : 'non_identifying';
+            const childCol = childTable.columns.find(c => c.id === colId);
+            const isPk = childCol?.isPk;
+            const isUk = childTable.uniqueKeys?.some(uq => uq.columnIds?.includes(colId));
+            const type = (isPk || isUk) ? 'identifying' : 'non_identifying';
             const newRelId = `rel_${refTable.id}_${childTable.id}_${colId}`;
             nextRels = [
               ...cleanedRels,

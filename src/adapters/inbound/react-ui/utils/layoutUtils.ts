@@ -197,23 +197,37 @@ export const isOneToOneRelationship = (rel: Relationship, tables: Table[]): bool
     const toTable = tables.find(t => t.id === rel.to);
     if (!fromTable || !toTable || !rel.mappings || rel.mappings.length === 0) return false;
 
-    // 子テーブルの主キー（PK）カラムリスト
-    const childPkCols = toTable.columns.filter(c => c.isPk);
-    if (childPkCols.length === 0) return false;
-
     // マッピングされた子テーブルのカラムIDリスト
     const relChildColIds = rel.mappings.map(m => m.childColId);
+    
+    // 子テーブル側の一意性キー候補リスト（PKおよび各UKの構成カラムID配列のリスト）
+    const candidateKeys: string[][] = [];
 
-    // 1. マッピングに含まれる子カラムが、子テーブルの主キー(PK)をすべてカバーしているか判定
-    const coversAllChildPks = childPkCols.every(pk => relChildColIds.includes(pk.id));
+    // ① PKカラムセット
+    const pkColIds = toTable.columns.filter(c => c.isPk).map(c => c.id);
+    if (pkColIds.length > 0) {
+        candidateKeys.push(pkColIds);
+    }
 
-    // 2. マッピングされた子カラムが、すべて主キー(PK)であるか判定
-    const allChildColsArePk = relChildColIds.every(cid => {
-        const col = toTable.columns.find(c => c.id === cid);
-        return col ? col.isPk : false;
+    // ② 各UKのカラムセット
+    if (toTable.uniqueKeys && toTable.uniqueKeys.length > 0) {
+        toTable.uniqueKeys.forEach(uq => {
+            if (uq.columnIds && uq.columnIds.length > 0) {
+                candidateKeys.push(uq.columnIds);
+            }
+        });
+    }
+
+    if (candidateKeys.length === 0) return false;
+
+    // マッピングされた子カラム集合が、いずれかの一意性キー候補（PKまたはUK）の完全集合と一致（カバー＆余計なカラムを含まない）しているか判定
+    const isMatchingAnyCandidate = candidateKeys.some(keyColIds => {
+        const coversKey = keyColIds.every(id => relChildColIds.includes(id));
+        const matchesOnlyKey = relChildColIds.every(id => keyColIds.includes(id));
+        return coversKey && matchesOnlyKey;
     });
 
-    return coversAllChildPks && allChildColsArePk;
+    return isMatchingAnyCandidate;
 };
 
 /**
