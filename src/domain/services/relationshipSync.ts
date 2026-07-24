@@ -45,14 +45,25 @@ export const syncRelationshipsWithTables = (
         return pCol && cCol;
       }) : [];
       
-      // マッピングされた子カラムの中にPK(isPk: true)またはUK(uniqueKeys)が含まれていれば 'identifying'、なければ 'non_identifying' へ動的に決定
+      // 【案A（完全一致方式）】
+      // ① マッピングされた子カラムがすべて子テーブルの主キー(isPk: true)であること
+      // ② 親テーブルのすべての主キー(PK)カラムがマッピングに含まれていること
       const rawMappings = rel.mappings || [];
-      const hasPkOrUkMapping = rawMappings.some(m => {
-        const cCol = childTable.columns.find(c => c.id === m.childColId);
-        const isUk = childTable.uniqueKeys?.some(uq => uq.columnIds?.includes(m.childColId));
-        return cCol && (cCol.isPk || isUk);
-      });
-      const type = hasPkOrUkMapping ? 'identifying' : 'non_identifying';
+      const parentPkColIds = parentTable.columns.filter(c => c.isPk).map(c => c.id);
+      
+      let isIdentifying = false;
+      if (rawMappings.length > 0 && parentPkColIds.length > 0) {
+        const allChildMappedArePk = rawMappings.every(m => {
+          const cCol = childTable.columns.find(c => c.id === m.childColId);
+          return cCol && cCol.isPk;
+        });
+        const allParentPkMapped = parentPkColIds.every(pPkId =>
+          rawMappings.some(m => m.parentColId === pPkId)
+        );
+        isIdentifying = allChildMappedArePk && allParentPkMapped;
+      }
+
+      const type = isIdentifying ? 'identifying' : 'non_identifying';
 
       validRelationships.push({
         ...rel,

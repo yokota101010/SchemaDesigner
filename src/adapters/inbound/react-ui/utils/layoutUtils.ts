@@ -134,19 +134,26 @@ export const calculateRelationshipPath = (
         const tableA = tables.find(t => t.id === a.from);
         const tableB = tables.find(t => t.id === b.from);
         
-        const ya = tableA?.id === draggingId && dragPos ? dragPos.y : (tableA?.y || 0);
-        const yb = tableB?.id === draggingId && dragPos ? dragPos.y : (tableB?.y || 0);
-        const xa = tableA?.id === draggingId && dragPos ? dragPos.x : (tableA?.x || 0);
-        const xb = tableB?.id === draggingId && dragPos ? dragPos.x : (tableB?.x || 0);
-        
-        const toY = toRect.y;
-        const isAboveA = ya < toY;
-        const isAboveB = yb < toY;
-        
+        const rectA = tableA ? getRect(tableA) : null;
+        const rectB = tableB ? getRect(tableB) : null;
+
+        // テーブルの中心Y座標を算出し、子テーブルの中心Y座標と比較
+        const centerYA = rectA ? rectA.y + rectA.height / 2 : 0;
+        const centerYB = rectB ? rectB.y + rectB.height / 2 : 0;
+        const centerYTo = toRect.y + toRect.height / 2;
+
+        const isAboveA = centerYA < centerYTo;
+        const isAboveB = centerYB < centerYTo;
+
+        // 上グループ（isAbove = true）を前（接続点の上側）に、下グループ（isAbove = false）を後（接続点の下側）に配置
         if (isAboveA && !isAboveB) return -1;
         if (!isAboveA && isAboveB) return 1;
-        
-        return xb - xa; // 親のX座標の降順
+
+        const xa = rectA ? rectA.x : 0;
+        const xb = rectB ? rectB.x : 0;
+
+        // グループ内では親のX座標の降順（右にある親ほど上側の接続点）
+        return xb - xa;
     });
     
     const index = sortedIncomingRels.findIndex(r => r.id === rel.id);
