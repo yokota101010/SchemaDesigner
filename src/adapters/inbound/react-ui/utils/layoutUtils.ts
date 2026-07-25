@@ -152,8 +152,14 @@ export const calculateRelationshipPath = (
         const xa = rectA ? rectA.x : 0;
         const xb = rectB ? rectB.x : 0;
 
-        // グループ内では親のX座標の降順（右にある親ほど上側の接続点）
-        return xb - xa;
+        // グループ内のソート順:
+        // - 上グループ: 右にある親ほど上側に接続 (X座標降順)
+        // - 下グループ: 左にある親ほど上側に接続 (X座標昇順)
+        if (isAboveA) {
+            return xb - xa;
+        } else {
+            return xa - xb;
+        }
     });
     
     const index = sortedIncomingRels.findIndex(r => r.id === rel.id);
@@ -182,7 +188,36 @@ export const calculateRelationshipPath = (
         pathData = generateLoopOrthogonalPath(startX, startY, midX, endX, endY);
     } else {
         // 従来のL字型パス（親の上下端から子の左端へ）
-        startX = fromRect.x + 24; 
+        const outgoingRels = relationships.filter(r => r.from === rel.from && !isOneToOneRelationship(r, tables));
+        const sameDirOutgoingRels = outgoingRels.filter(r => {
+            const t = tables.find(tbl => tbl.id === r.to);
+            if (!t) return false;
+            const dp = t.id === draggingId ? dragPos : null;
+            const tr = getTableRect(t, viewOffset, dp);
+            return (tr.y > fromRect.y) === isChildBelow;
+        });
+
+        // グループ内のソート順:
+        // - 上グループ: 上にある子テーブル（Y座標が小さい）ほど親の左寄りから出線 (Y座標昇順: ya - yb)
+        // - 下グループ: 下にある子テーブル（Y座標が大きい）ほど親の左寄りから出線 (Y座標降順: yb - ya)
+        sameDirOutgoingRels.sort((a, b) => {
+            const tableA = tables.find(t => t.id === a.to);
+            const tableB = tables.find(t => t.id === b.to);
+            const rectA = tableA ? getRect(tableA) : null;
+            const rectB = tableB ? getRect(tableB) : null;
+            const ya = rectA ? rectA.y : 0;
+            const yb = rectB ? rectB.y : 0;
+            return isChildBelow ? (yb - ya) : (ya - yb);
+        });
+
+        const outgoingIndex = sameDirOutgoingRels.findIndex(r => r.id === rel.id);
+        const validOutgoingIndex = outgoingIndex >= 0 ? outgoingIndex : 0;
+
+        const startXGap = 15;
+        const baseStartX = fromRect.x + 24 + validOutgoingIndex * startXGap;
+        const maxStartX = fromRect.x + Math.max(24, fromRect.width - 24);
+        startX = Math.min(baseStartX, maxStartX);
+
         startY = isChildBelow ? (fromRect.y + fromRect.height + 8) : (fromRect.y - 8);
         endX = toRect.x;
         endY = toRect.y + toRect.height / 2 + yOffset;

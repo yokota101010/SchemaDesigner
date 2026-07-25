@@ -67,8 +67,14 @@ export const useDragAndDrop = (
             const mouseX = clientX - rect.left;
             const mouseY = clientY - rect.top;
 
-            const newX = mouseX - dragOffset.x - viewOffset.x;
-            const newY = mouseY - dragOffset.y - viewOffset.y;
+            const GRID_SIZE_X = 20 * 6; // 6コマ (120px) 単位
+            const OFFSET_X = 20 * 2;     // 開始位置: 2コマ目 (40px)
+            const GRID_SIZE_Y = 20;     // 1コマ (20px) 単位
+            const rawX = mouseX - dragOffset.x - viewOffset.x;
+            const rawY = mouseY - dragOffset.y - viewOffset.y;
+
+            const newX = OFFSET_X + Math.round((rawX - OFFSET_X) / GRID_SIZE_X) * GRID_SIZE_X;
+            const newY = Math.round(rawY / GRID_SIZE_Y) * GRID_SIZE_Y;
 
             const tableEl = document.getElementById(`table-${draggingId}`);
             if (tableEl) {
@@ -117,7 +123,13 @@ export const useDragAndDrop = (
 
   const handleDragEnd = () => {
     if (draggingId && latestDragPosRef.current) {
-        const finalPos = latestDragPosRef.current;
+        const GRID_SIZE_X = 20 * 6;
+        const OFFSET_X = 20 * 2;
+        const GRID_SIZE_Y = 20;
+        const finalPos = {
+            x: OFFSET_X + Math.round((latestDragPosRef.current.x - OFFSET_X) / GRID_SIZE_X) * GRID_SIZE_X,
+            y: Math.round(latestDragPosRef.current.y / GRID_SIZE_Y) * GRID_SIZE_Y
+        };
         setTables(prev => prev.map(t => t.id === draggingId ? { ...t, x: finalPos.x, y: finalPos.y } : t));
     }
     setDraggingId(null);

@@ -45,22 +45,46 @@ export const syncRelationshipsWithTables = (
         return pCol && cCol;
       }) : [];
       
-      // 【案A（完全一致方式）】
-      // ① マッピングされた子カラムがすべて子テーブルの主キー(isPk: true)であること
-      // ② 親テーブルのすべての主キー(PK)カラムがマッピングに含まれていること
+      // ① マッピングされた子カラムがすべて子テーブルの主キー(isPk: true)または一意性キー(UK)であること
+      // ② 親テーブルのいずれかの主キー(PK)または一意性キー(UK)の構成カラムがマッピングに含まれていること
       const rawMappings = rel.mappings || [];
+
+      // 親テーブルの一意性キー候補 (PKのカラム集合、および各UKのカラム集合)
+      const parentCandidateKeys: string[][] = [];
       const parentPkColIds = parentTable.columns.filter(c => c.isPk).map(c => c.id);
-      
-      let isIdentifying = false;
-      if (rawMappings.length > 0 && parentPkColIds.length > 0) {
-        const allChildMappedArePk = rawMappings.every(m => {
-          const cCol = childTable.columns.find(c => c.id === m.childColId);
-          return cCol && cCol.isPk;
+      if (parentPkColIds.length > 0) {
+        parentCandidateKeys.push(parentPkColIds);
+      }
+      if (parentTable.uniqueKeys && parentTable.uniqueKeys.length > 0) {
+        parentTable.uniqueKeys.forEach(uq => {
+          if (uq.columnIds && uq.columnIds.length > 0) {
+            parentCandidateKeys.push(uq.columnIds);
+          }
         });
-        const allParentPkMapped = parentPkColIds.every(pPkId =>
-          rawMappings.some(m => m.parentColId === pPkId)
+      }
+
+      // 子テーブルの一意性キー集合 (PKおよび各UKのカラム)
+      const childUniqueColIds = new Set<string>();
+      childTable.columns.forEach(c => {
+        if (c.isPk) childUniqueColIds.add(c.id);
+      });
+      if (childTable.uniqueKeys && childTable.uniqueKeys.length > 0) {
+        childTable.uniqueKeys.forEach(uq => {
+          if (uq.columnIds) {
+            uq.columnIds.forEach(id => childUniqueColIds.add(id));
+          }
+        });
+      }
+
+      let isIdentifying = false;
+      if (rawMappings.length > 0 && parentCandidateKeys.length > 0) {
+        const allChildMappedAreUk = rawMappings.every(m => childUniqueColIds.has(m.childColId));
+        const mappedParentColIds = rawMappings.map(m => m.parentColId);
+        const parentKeyIsFullyMapped = parentCandidateKeys.some(keyColIds =>
+          keyColIds.every(pColId => mappedParentColIds.includes(pColId))
         );
-        isIdentifying = allChildMappedArePk && allParentPkMapped;
+
+        isIdentifying = allChildMappedAreUk && parentKeyIsFullyMapped;
       }
 
       const type = isIdentifying ? 'identifying' : 'non_identifying';

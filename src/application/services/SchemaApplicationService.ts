@@ -5,8 +5,13 @@ import { calculateAlignSubTablesPlacements } from '../../domain/services/layoutA
 
 export class SchemaApplicationService implements SchemaUseCase {
   addTable(tables: Table[], viewOffset: { x: number; y: number }, canvasWidth: number, canvasHeight: number): Table[] {
-    const centerX = -viewOffset.x + (canvasWidth / 2);
-    const centerY = -viewOffset.y + (canvasHeight / 2);
+    const rawX = -viewOffset.x + (canvasWidth / 2);
+    const rawY = -viewOffset.y + (canvasHeight / 2);
+    const GRID_SIZE_X = 20 * 6; // 6コマ (120px) 単位
+    const OFFSET_X = 20 * 2;     // 開始位置: 2コマ目 (40px)
+    const GRID_SIZE_Y = 20;     // 1コマ (20px) 単位
+    const centerX = OFFSET_X + Math.round((rawX - OFFSET_X) / GRID_SIZE_X) * GRID_SIZE_X;
+    const centerY = Math.round(rawY / GRID_SIZE_Y) * GRID_SIZE_Y;
 
     const newId = `table_${Date.now()}`;
     return [...tables, {
