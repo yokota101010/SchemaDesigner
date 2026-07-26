@@ -1,7 +1,7 @@
 import { AiClient } from '../../ports/outbound/AiClient';
-import { Table, Relationship, ValueObjectPreset } from '../../domain/models';
-import { buildSingleTableResponseSchema, buildSingleTableDerivationSchema, buildInitialValueParsingSchema, buildAllTablesResponseSchema, buildAllTablesDerivationSchema } from '../../utils/aiSchemaBuilder';
-import { buildSingleTablePrompt, buildSingleTableDerivationPrompt, buildInitialValueParsingPrompt, buildAllTablesPrompt, buildAllTablesDerivationPrompt } from '../../utils/aiPromptBuilder';
+import { Table, Relationship, ValueObjectPreset, Column } from '../../domain/models';
+import { buildSingleTableResponseSchema, buildSingleTableDerivationSchema, buildInitialValueParsingSchema, buildAllTablesResponseSchema, buildAllTablesDerivationSchema, buildStepDerivationSchema } from '../../utils/aiSchemaBuilder';
+import { buildSingleTablePrompt, buildSingleTableDerivationPrompt, buildInitialValueParsingPrompt, buildAllTablesPrompt, buildAllTablesDerivationPrompt, buildStepDerivationPrompt } from '../../utils/aiPromptBuilder';
 import { mergeMockRows } from '../../utils/mockDataMerger';
 
 const getModel = () => {
@@ -72,13 +72,13 @@ export class GeminiAiClient implements AiClient {
 
         const finalRows = mergeMockRows(existingRows, generatedRows, pkCols);
 
-        // 導出カラムの初期値（空文字列）を設定する
+        // 導出カラムの初期値（null）を設定する
         const dependentCols = table.columns.filter(c => c.attributeType === 'dependent' && !table.columns.some(x => x.parentColumnId === c.id));
         allGeneratedData[table.id] = finalRows.map(row => {
           const updatedRow = { ...row };
           dependentCols.forEach(col => {
-            if (updatedRow[col.id] === undefined) {
-              updatedRow[col.id] = "";
+            if (updatedRow[col.id] === undefined || updatedRow[col.id] === "") {
+              updatedRow[col.id] = null;
             }
           });
           return updatedRow;
@@ -91,59 +91,173 @@ export class GeminiAiClient implements AiClient {
       throw err;
     }
 
-    // 3. 第2段階: 導出項目の一括計算
-    console.log("[RDB Mock Data Generator] 第1段階完了。クールダウンのため 5000ms 待機します...");
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // 3. 第2段階: 段階的トポロジカル導出項目計算
+    console.log("[RDB Mock Data Generator] 第1段階完了。クールダウンのため 3000ms 待機します...");
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    console.log("[RDB Mock Data Generator] 第2段階: 全テーブルの導出項目の一括計算を開始します...");
+    console.log("[RDB Mock Data Generator] 第2段階: 依存関係に基づく段階的導出項目の計算を開始します...");
     try {
-      const calculatedData = await this.calculateAllTablesDerivations(tables, relationships, allGeneratedData, apiKey, otherInstructions);
-      console.log(`[RDB Mock Data Generator] 第2段階の計算結果を受信しました:`, calculatedData);
-
-      // 各テーブルの計算結果をマージする
-      tables.forEach(table => {
-        const tableData = calculatedData[table.id] || {};
-        const calculatedRows = Array.isArray(tableData.rows) ? tableData.rows : [];
-        const currentTableData = allGeneratedData[table.id] || [];
-        const pkCols = table.columns.filter(col => col.isPk && col.attributeType !== 'dependent' && !table.columns.some(x => x.parentColumnId === col.id));
-
-        allGeneratedData[table.id] = currentTableData.map((row, idx) => {
-          let match = null;
-          if (pkCols.length === 0) {
-            match = calculatedRows[idx];
-          } else {
-            match = calculatedRows.find((r: any) => {
-              return pkCols.every(pkCol => {
-                return r[pkCol.id] !== undefined && row[pkCol.id] !== undefined && String(r[pkCol.id]) === String(row[pkCol.id]);
-              });
-            });
-            
-            // 主キーでのマッチングに失敗した場合、同じ行番号（インデックス）のデータを代替で使用する（AIのブレ防止）
-            if (!match && calculatedRows[idx]) {
-              match = calculatedRows[idx];
-            }
-          }
-
-          if (match) {
-            const merged = { ...row };
-            table.columns.forEach(col => {
-              if (col.attributeType === 'dependent' && match[col.id] !== undefined) {
-                merged[col.id] = match[col.id];
-              }
-            });
-            return merged;
-          }
-          return row;
-        });
-
-        console.log(`[RDB Mock Data Generator] テーブル '${table.name}' の導出計算が完了しました`);
-      });
+      await this.calculateAllTablesDerivationsTopological(tables, relationships, allGeneratedData, apiKey, otherInstructions);
+      console.log(`[RDB Mock Data Generator] 段階的導出項目の計算が完了しました。`);
     } catch (err) {
-      console.error(`[RDB Mock Data Generator] 一括導出計算中にエラーが発生しました:`, err);
+      console.error(`[RDB Mock Data Generator] 段階的導出計算中にエラーが発生しました:`, err);
       throw err;
     }
 
     return allGeneratedData;
+  }
+
+  /**
+   * 依存関係に基づく段階的（トポロジカル）導出計算
+   */
+  private async calculateAllTablesDerivationsTopological(
+    tables: Table[],
+    relationships: Relationship[],
+    allGeneratedData: Record<string, any[]>,
+    apiKey: string,
+    otherInstructions = ''
+  ): Promise<void> {
+    const maxSteps = 6;
+    let step = 1;
+
+    while (step <= maxSteps) {
+      // 1. 現時点で null の導出カラムのうち、依存先が確定している計算可能カラムを抽出
+      const targetColsMap: Record<string, string[]> = {};
+      let totalTargetCols = 0;
+      let totalRemainingNullCols = 0;
+
+      tables.forEach(table => {
+        const rows = allGeneratedData[table.id] || [];
+        const uncomputedCols = table.columns.filter(c => {
+          if (c.attributeType !== 'dependent') return false;
+          if (table.columns.some(x => x.parentColumnId === c.id)) return false;
+          // 行の中に null または undefined の項目が存在するか
+          return rows.some(r => r[c.id] === null || r[c.id] === undefined);
+        });
+
+        totalRemainingNullCols += uncomputedCols.length;
+
+        const resolvableColIds: string[] = [];
+        uncomputedCols.forEach(col => {
+          // カラムの依存関係判定：
+          // 導出式に参照されている別の導出項目が、現時点で全行非nullになっているか、または他テーブルの参照値が準備できているか
+          const formula = col.derivation || '';
+          
+          // 他の未計算導出カラムで、かつこの公式内で言及されている可能性があるかをチェック
+          const reliesOnUncomputedInSameTable = uncomputedCols.some(otherCol => {
+            if (otherCol.id === col.id) return false;
+            return formula.includes(otherCol.name) || formula.includes(otherCol.id);
+          });
+
+          if (!reliesOnUncomputedInSameTable) {
+            resolvableColIds.push(col.id);
+          }
+        });
+
+        if (resolvableColIds.length > 0) {
+          targetColsMap[table.id] = resolvableColIds;
+          totalTargetCols += resolvableColIds.length;
+        }
+      });
+
+      if (totalRemainingNullCols === 0) {
+        console.log(`[RDB Mock Data Generator] すべての導出項目が正常に計算されました。`);
+        break;
+      }
+
+      // 解消可能な項目が1つもないが、未計算項目が残っている場合
+      if (totalTargetCols === 0) {
+        console.log(`[RDB Mock Data Generator] 残りの導出項目の依存関係を1括評価でフォールバック計算します (${totalRemainingNullCols}項目)...`);
+        // 残りの null カラムを全件 target とする
+        tables.forEach(table => {
+          const rows = allGeneratedData[table.id] || [];
+          const remaining = table.columns.filter(c => c.attributeType === 'dependent' && rows.some(r => r[c.id] === null || r[c.id] === undefined)).map(c => c.id);
+          if (remaining.length > 0) {
+            targetColsMap[table.id] = remaining;
+            totalTargetCols += remaining.length;
+          }
+        });
+      }
+
+      console.log(`[RDB Mock Data Generator] === Derivation Step ${step} === (対象カラム数: ${totalTargetCols}, 残り未計算: ${totalRemainingNullCols})`);
+
+      const prompt = buildStepDerivationPrompt(tables, allGeneratedData, targetColsMap, step, otherInstructions);
+      const responseSchema = buildStepDerivationSchema(tables, targetColsMap, relationships);
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${getModel()}:generateContent?key=${apiKey}`;
+
+      const response = await this.fetchWithRetry(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: responseSchema,
+            temperature: 0.1
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`Gemini API Error for derivation Step ${step}:`, errText);
+        throw new Error(`段階的導出計算 (Step ${step}) に失敗しました (${response.status})`);
+      }
+
+      const json = await response.json();
+      try {
+        const textResponse = json.candidates[0].content.parts[0].text;
+        const calculatedData = JSON.parse(textResponse);
+
+        // 受信した計算結果で allGeneratedData の該当カラムを更新する
+        tables.forEach(table => {
+          const targetColIds = targetColsMap[table.id] || [];
+          if (targetColIds.length === 0) return;
+
+          const tableData = calculatedData[table.id] || {};
+          const calculatedRows = Array.isArray(tableData.rows) ? tableData.rows : [];
+          const currentTableData = allGeneratedData[table.id] || [];
+          const pkCols = table.columns.filter(col => col.isPk && col.attributeType !== 'dependent');
+
+          allGeneratedData[table.id] = currentTableData.map((row, idx) => {
+            let match = null;
+            if (pkCols.length === 0) {
+              match = calculatedRows[idx];
+            } else {
+              match = calculatedRows.find((r: any) => {
+                return pkCols.every(pkCol => {
+                  return r[pkCol.id] !== undefined && row[pkCol.id] !== undefined && String(r[pkCol.id]) === String(row[pkCol.id]);
+                });
+              });
+            }
+
+            if (!match && calculatedRows[idx]) {
+              match = calculatedRows[idx];
+            }
+
+            if (match) {
+              const updatedRow = { ...row };
+              targetColIds.forEach(colId => {
+                if (match[colId] !== undefined && match[colId] !== null && match[colId] !== "") {
+                  updatedRow[colId] = match[colId];
+                }
+              });
+              return updatedRow;
+            }
+            return row;
+          });
+        });
+
+      } catch (e) {
+        console.error(`JSON parsing error for derivation Step ${step}:`, e);
+        throw new Error(`段階的導出計算 (Step ${step}) レスポンスのJSON解析に失敗しました。`);
+      }
+
+      step++;
+      if (step <= maxSteps && totalRemainingNullCols > totalTargetCols) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
   }
 
   private async parseAndApplyInitialValues(tables: Table[], initialInstructions: string, apiKey: string): Promise<any> {

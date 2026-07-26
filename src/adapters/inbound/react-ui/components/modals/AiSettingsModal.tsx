@@ -6,9 +6,16 @@ interface AiSettingsModalProps {
     setShowModal: (show: boolean) => void;
 }
 
+const PRESET_MODELS = [
+    { value: 'gemini-3.5-flash', label: 'gemini-3.5-flash (Gemini 3.5 Flash - 最先端・推奨)' },
+    { value: 'gemini-3.1-flash-lite', label: 'gemini-3.1-flash-lite (Gemini 3.1 Flash-Lite - 高速軽量)' },
+];
+
 export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, setShowModal }) => {
     const [apiKey, setApiKey] = useState<string>('');
     const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash');
+    const [customModel, setCustomModel] = useState<string>('');
+    const [isCustom, setIsCustom] = useState<boolean>(false);
     const [showKey, setShowKey] = useState<boolean>(false);
     const [isSaved, setIsSaved] = useState<boolean>(false);
 
@@ -17,23 +24,50 @@ export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, set
             const savedKey = localStorage.getItem('schema-designer-gemini-apikey') || '';
             const savedModel = localStorage.getItem('schema-designer-gemini-model') || 'gemini-3.5-flash';
             setApiKey(savedKey);
-            setSelectedModel(savedModel);
+            
+            const isPreset = PRESET_MODELS.some(m => m.value === savedModel);
+            if (isPreset) {
+                setSelectedModel(savedModel);
+                setIsCustom(false);
+                setCustomModel('');
+            } else {
+                setSelectedModel('custom');
+                setIsCustom(true);
+                setCustomModel(savedModel);
+            }
+
             setIsSaved(!!savedKey);
         }
     }, [showModal]);
 
     if (!showModal) return null;
 
-    const handleSave = () => {
-        if (apiKey.trim()) {
-            localStorage.setItem('schema-designer-gemini-apikey', apiKey.trim());
-            localStorage.setItem('schema-designer-gemini-model', selectedModel);
-            setIsSaved(true);
-            setShowModal(false);
-            alert("設定を保存しました。");
+    const handleModelSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const val = e.target.value;
+        setSelectedModel(val);
+        if (val === 'custom') {
+            setIsCustom(true);
         } else {
-            alert("APIキーを入力してください。");
+            setIsCustom(false);
         }
+    };
+
+    const handleSave = () => {
+        const finalModel = isCustom ? customModel.trim() : selectedModel;
+        if (!apiKey.trim()) {
+            alert("APIキーを入力してください。");
+            return;
+        }
+        if (isCustom && !finalModel) {
+            alert("カスタムモデル名を入力してください。");
+            return;
+        }
+
+        localStorage.setItem('schema-designer-gemini-apikey', apiKey.trim());
+        localStorage.setItem('schema-designer-gemini-model', finalModel);
+        setIsSaved(true);
+        setShowModal(false);
+        alert("設定を保存しました。");
     };
 
     const handleDelete = () => {
@@ -42,6 +76,8 @@ export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, set
             localStorage.removeItem('schema-designer-gemini-model');
             setApiKey('');
             setSelectedModel('gemini-3.5-flash');
+            setCustomModel('');
+            setIsCustom(false);
             setIsSaved(false);
             alert("設定を削除しました。");
         }
@@ -73,16 +109,24 @@ export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, set
                         </label>
                         <select
                             value={selectedModel}
-                            onChange={(e) => setSelectedModel(e.target.value)}
+                            onChange={handleModelSelectChange}
                             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-xs bg-white transition-shadow cursor-pointer"
                         >
-                            <option value="gemini-3.5-flash">gemini-3.5-flash (最新・高速・推奨)</option>
-                            <option value="gemini-3.5-pro">gemini-3.5-pro (最新・高精度 - クォータ制限厳)</option>
-                            <option value="gemini-2.5-flash">gemini-2.5-flash (前世代高速版)</option>
-                            <option value="gemini-2.5-pro">gemini-2.5-pro (前世代高精度版)</option>
-                            <option value="gemini-1.5-flash">gemini-1.5-flash (旧世代高速版)</option>
-                            <option value="gemini-1.5-pro">gemini-1.5-pro (旧世代高精度版)</option>
+                            {PRESET_MODELS.map(m => (
+                                <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
+                            <option value="custom">✏️ カスタムモデル名を直接入力</option>
                         </select>
+
+                        {isCustom && (
+                            <input
+                                type="text"
+                                value={customModel}
+                                onChange={(e) => setCustomModel(e.target.value)}
+                                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono text-xs transition-shadow"
+                                placeholder="例: gemini-2.0-flash-lite またはカスタムモデルID"
+                            />
+                        )}
                     </div>
 
                     <div className="flex flex-col gap-1.5">

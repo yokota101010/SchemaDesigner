@@ -285,3 +285,68 @@ export const buildAllTablesDerivationSchema = (tables: Table[], relationships: R
         required: tables.map(t => t.id)
     };
 };
+
+/**
+ * 段階的導出評価の各ステップ用 JSON Schema を構築する
+ * targetColsMap: 各テーブルにおいて、このステップで計算対象とする導出カラムIDの配列
+ */
+export const buildStepDerivationSchema = (
+    tables: Table[], 
+    targetColsMap: Record<string, string[]>, 
+    relationships: Relationship[] = []
+): any => {
+    const tableProps: Record<string, any> = {};
+
+    tables.forEach(table => {
+        const targetColIds = targetColsMap[table.id] || [];
+        if (targetColIds.length === 0) return; // このステップで計算対象カラムがないテーブルはスキップ
+
+        const columnProps: Record<string, any> = {};
+        
+        table.columns.forEach(col => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === col.id);
+            if (isVoParent) return;
+
+            let desc = `Value for column '${col.name}' (${col.type})`;
+            if (col.attributeType === 'dependent') {
+                desc += ` [Derived using formula: ${col.derivation || ''}]`;
+                if (targetColIds.includes(col.id)) {
+                    desc += ` [TARGET DERIVED COLUMN TO CALCULATE IN THIS STEP]`;
+                }
+            }
+
+            columnProps[col.id] = {
+                type: 'string',
+                description: desc
+            };
+        });
+
+        tableProps[table.id] = {
+            type: 'object',
+            properties: {
+                calculation_steps: {
+                    type: 'string',
+                    description: `Step-by-step mathematical explanation of how you computed the target derived columns (${targetColIds.join(', ')}) for each row in table '${table.name}'.`
+                },
+                rows: {
+                    type: 'array',
+                    description: `List of rows for table '${table.name}' with computed values for target columns`,
+                    items: {
+                        type: 'object',
+                        properties: columnProps,
+                        required: table.columns.filter(col => !table.columns.some(x => x.parentColumnId === col.id)).map(col => col.id)
+                    }
+                }
+            },
+            required: ['calculation_steps', 'rows']
+        };
+    });
+
+    const requiredTableIds = Object.keys(targetColsMap).filter(tId => (targetColsMap[tId] || []).length > 0);
+
+    return {
+        type: 'object',
+        properties: tableProps,
+        required: requiredTableIds
+    };
+};

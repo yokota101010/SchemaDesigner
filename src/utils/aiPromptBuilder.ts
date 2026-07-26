@@ -453,3 +453,79 @@ export const buildAllTablesDerivationPrompt = (
 
     return prompt;
 };
+
+/**
+ * 段階的導出計算の各ステップ用プロンプトを構築する
+ */
+export const buildStepDerivationPrompt = (
+  tables: Table[],
+  allGeneratedData: Record<string, any[]>,
+  targetColsMap: Record<string, string[]>,
+  stepIndex: number,
+  otherInstructions = ''
+): string => {
+    let prompt = `You are a database calculation engine performing Step ${stepIndex} of a topological derived-column computation.\n`;
+    prompt += `In this step, your ONLY task is to compute the specific target derived columns listed below. All prerequisite source values (independent values or previously-calculated derived values) are fully populated in the input data.\n\n`;
+
+    prompt += `### Target Derived Columns to Compute in this Step:\n`;
+    tables.forEach(table => {
+        const targetColIds = targetColsMap[table.id] || [];
+        if (targetColIds.length > 0) {
+            prompt += `- Table '${table.name}' (ID: '${table.id}'):\n`;
+            targetColIds.forEach(cId => {
+                const col = table.columns.find(c => c.id === cId);
+                if (col) {
+                    prompt += `  * Column '${col.name}' (ID: '${col.id}') [Formula: ${col.derivation || ''}]\n`;
+                }
+            });
+        }
+    });
+    prompt += `\n`;
+
+    prompt += `### Database Schema Definitions:\n`;
+    tables.forEach(table => {
+        prompt += `- Table: '${table.name}' (ID: '${table.id}')\n`;
+        if (table.description && table.description.trim() !== '') {
+            prompt += `  * Table Business Rules: "${table.description}"\n`;
+        }
+        prompt += `  * Columns:\n`;
+        table.columns.forEach(c => {
+            const isVoParent = table.columns.some(x => x.parentColumnId === c.id);
+            if (isVoParent) return;
+
+            const isTarget = (targetColsMap[table.id] || []).includes(c.id);
+            prompt += `    - Column ID: '${c.id}', Physics Name: '${c.name}', Type: '${c.type}'`;
+            if (c.attributeType === 'dependent') {
+                prompt += `, (DERIVED) Formula: [${c.derivation || ''}]${isTarget ? ' <-- TARGET FOR THIS STEP' : ''}`;
+            }
+            if (c.description) {
+                prompt += `, Description/Instruction: "${c.description}"`;
+            }
+            prompt += '\n';
+        });
+
+        const sortDesc = getSortDescriptions(table);
+        if (sortDesc) {
+            prompt += `  * Evaluation Sequence: Order by [${sortDesc}]. Compute derived fields sequentially in this row order.\n`;
+        }
+        prompt += '\n';
+    });
+
+    prompt += `### Input Data (Source values populated, null means uncomputed):\n`;
+    tables.forEach(table => {
+        const rows = allGeneratedData[table.id] || [];
+        prompt += `- Table ID '${table.id}' (${table.name}) rows:\n`;
+        prompt += JSON.stringify(rows, null, 2) + '\n\n';
+    });
+
+    if (otherInstructions && otherInstructions.trim() !== '') {
+        prompt += `### Additional Instructions:\n"""\n${otherInstructions}\n"""\n\n`;
+    }
+
+    prompt += `### Rules for Step ${stepIndex} Computation:\n`;
+    prompt += `1. Focus ONLY on computing values for the TARGET DERIVED COLUMNS. Preserve all other existing column values exact as given.\n`;
+    prompt += `2. Read the prerequisite values (which are now fully populated in input data) and calculate the target derived columns strictly according to the formulas.\n`;
+    prompt += `3. Return a JSON object containing updated rows for the target tables.\n`;
+
+    return prompt;
+};
