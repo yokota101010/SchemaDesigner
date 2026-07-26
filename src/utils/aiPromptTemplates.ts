@@ -67,9 +67,12 @@ export const AI_PROMPT_GENERATION_RULES = (rowCount: number, pkColumnId: string)
      - If the user's custom instructions specify table-specific row counts or patterns, you MUST prioritize those instructions.
      - When generating parent/master tables, you MUST logically compute and deduce the required number of rows needed to support the child/related table constraints described in the instructions.
      - Conversely, when generating child/related tables, you MUST examine the generated parent datasets (e.g., distinct parent primary keys, master codes, or categories) and logically deduce the required child rows. Ensure that the generated child records are distributed reasonably and realistically across all available parent keys (e.g., if there are multiple active master/parent key values, generate child rows spread across them to ensure realistic data coverage, rather than clustering all child records under a single parent key).
-2. **Referential Integrity & Dynamic Synchronization (CRITICAL)**: 
+2. **Referential Integrity & Parent Key Completeness (CRITICAL)**: 
    - Your foreign key columns MUST exactly reference valid existing primary key values from the parent tables provided above.
    - Do NOT use any IDs that are not present in the parent data list.
+   - **[Child-to-Parent Key Completeness (Including Composite & Identifying PK/FKs)]**:
+     - Regardless of whether a Foreign Key is a standalone attribute or forms part of a Composite Primary Key (Identifying Relationship), EVERY single or composite Foreign Key value referenced in a child table MUST have a corresponding matching Primary Key row present in the parent table.
+     - If a child table references a Foreign Key value (single or composite) that does NOT currently exist in the parent table, you MUST automatically detect and generate the missing parent row in the parent table to satisfy 100% referential integrity.
    - **[Dynamic Synchronization]**: If you detect that the parent table data (in "Referenced Parent Tables Data") has NEW primary keys that are NOT present in this table's "Existing Mock Data" (e.g. a new category code like "104" or "娯楽費" was added to the parent master), you MUST automatically and dynamically GENERATE new matching child rows in this table for those new keys to ensure complete semantic continuity.
    - **[Dynamic Cleanup]**: Conversely, if any keys present in this table's "Existing Mock Data" are no longer present in the parent table's keys (e.g. a category was deleted), you MUST completely DELETE/OMIT those orphaned rows from your output rows.
 3. **Derived/Computed Items**:

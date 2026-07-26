@@ -386,11 +386,10 @@ export const buildAllTablesPrompt = (
         prompt += `"""\n${otherInstructions}\n"""\n\n`;
     }
 
-    prompt += `### Rules for Generating Data:\n`;
+    prompt += `\n` + AI_PROMPT_GENERATION_RULES(rowCount, 'id') + `\n`;
+    prompt += `### Additional Instructions for Bulk Data Output:\n`;
     prompt += `1. Output a JSON object mapping table IDs to their list of generated rows (similar structure as the input but with row data).\n`;
-    prompt += `2. For non-master tables, generate exactly ${rowCount} rows (excluding any pre-existing rows). If there are pre-existing rows, output them first, then generate ${rowCount} additional rows.\n`;
-    prompt += `3. Always ensure that the values in child tables' FK columns exactly match existing values in the parent tables' corresponding PK columns.\n`;
-    prompt += `4. Generate highly realistic, consistent mock values (e.g., real names, matching dates, logical amounts, valid sequential IDs).\n`;
+    prompt += `2. For non-master tables, generate approximately ${rowCount} rows (excluding any pre-existing rows). If there are pre-existing rows, preserve them and add rows as needed.\n`;
     
     return prompt;
 };

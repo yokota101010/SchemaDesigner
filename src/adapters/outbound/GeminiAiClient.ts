@@ -2,7 +2,7 @@ import { AiClient } from '../../ports/outbound/AiClient';
 import { Table, Relationship, ValueObjectPreset, Column } from '../../domain/models';
 import { buildSingleTableResponseSchema, buildSingleTableDerivationSchema, buildInitialValueParsingSchema, buildAllTablesResponseSchema, buildAllTablesDerivationSchema, buildStepDerivationSchema } from '../../utils/aiSchemaBuilder';
 import { buildSingleTablePrompt, buildSingleTableDerivationPrompt, buildInitialValueParsingPrompt, buildAllTablesPrompt, buildAllTablesDerivationPrompt, buildStepDerivationPrompt } from '../../utils/aiPromptBuilder';
-import { mergeMockRows } from '../../utils/mockDataMerger';
+import { mergeMockRows, ensureReferentialIntegrity } from '../../utils/mockDataMerger';
 
 const getModel = () => {
   if (typeof localStorage !== 'undefined') {
@@ -86,6 +86,11 @@ export class GeminiAiClient implements AiClient {
 
         console.log(`[RDB Mock Data Generator] テーブル '${table.name}' の一括生成が完了しました（合計: ${allGeneratedData[table.id].length}件）`);
       });
+
+      // 2.5 参照整合性のプログラム自動補填 (第1段階直後・第2段階開始前)
+      console.log(`[RDB Mock Data Generator] 第1段階完了。参照整合性チェックと欠落親キーの自動補填を実行中...`);
+      const rescuedData = ensureReferentialIntegrity(tables, relationships, allGeneratedData);
+      Object.assign(allGeneratedData, rescuedData);
     } catch (err) {
       console.error(`[RDB Mock Data Generator] 一括データ生成中にエラーが発生しました:`, err);
       throw err;
