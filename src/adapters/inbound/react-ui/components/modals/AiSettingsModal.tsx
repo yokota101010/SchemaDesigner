@@ -1,31 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, X, Key, Trash2, Eye, EyeOff, Icon } from '../Icons';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Settings, X, Key, Trash2, Eye, EyeOff, Icon, RefreshCw } from '../Icons';
+import { GeminiAiClient } from '../../../../outbound/GeminiAiClient';
 
 interface AiSettingsModalProps {
     showModal: boolean;
     setShowModal: (show: boolean) => void;
 }
 
-const PRESET_MODELS = [
-    { value: 'gemini-3.5-flash', label: 'gemini-3.5-flash (Gemini 3.5 Flash - 最先端・推奨)' },
+const DEFAULT_PRESET_MODELS = [
+    { value: 'gemini-3.6-flash', label: 'gemini-3.6-flash (Gemini 3.6 Flash - 最先端・推奨)' },
     { value: 'gemini-3.1-flash-lite', label: 'gemini-3.1-flash-lite (Gemini 3.1 Flash-Lite - 高速軽量)' },
+    { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash (Gemini 2.5 Flash)' },
+    { value: 'gemini-2.0-flash', label: 'gemini-2.0-flash (Gemini 2.0 Flash)' },
 ];
 
 export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, setShowModal }) => {
     const [apiKey, setApiKey] = useState<string>('');
-    const [selectedModel, setSelectedModel] = useState<string>('gemini-3.5-flash');
+    const [selectedModel, setSelectedModel] = useState<string>('gemini-3.6-flash');
     const [customModel, setCustomModel] = useState<string>('');
     const [isCustom, setIsCustom] = useState<boolean>(false);
     const [showKey, setShowKey] = useState<boolean>(false);
     const [isSaved, setIsSaved] = useState<boolean>(false);
 
+    const [modelOptions, setModelOptions] = useState<Array<{ value: string; label: string }>>(DEFAULT_PRESET_MODELS);
+    const [isFetchingModels, setIsFetchingModels] = useState<boolean>(false);
+    const [fetchStatusMsg, setFetchStatusMsg] = useState<string>('');
+
+    const loadModels = useCallback(async (keyToUse: string, isManual = false) => {
+        if (!keyToUse || !keyToUse.trim()) {
+            if (isManual) alert("APIキーを入力してください。");
+            return;
+        }
+
+        setIsFetchingModels(true);
+        setFetchStatusMsg('Google APIから最新モデルを取得中...');
+
+        try {
+            const client = new GeminiAiClient();
+            const fetched = await client.fetchAvailableModels(keyToUse.trim());
+            if (fetched && fetched.length > 0) {
+                setModelOptions(fetched);
+                setFetchStatusMsg(`最新 ${fetched.length} 件のモデルを取得しました`);
+            } else {
+                setFetchStatusMsg('取得可能なモデルが見つかりませんでした');
+            }
+        } catch (err: any) {
+            console.error("Failed to fetch Gemini models:", err);
+            const errMsg = err.message || '取得エラー';
+            setFetchStatusMsg(`自動取得失敗: ${errMsg}`);
+            if (isManual) {
+                alert(`モデル一覧の最新化に失敗しました:\n${errMsg}`);
+            }
+        } finally {
+            setIsFetchingModels(false);
+        }
+    }, []);
+
     useEffect(() => {
         if (showModal) {
             const savedKey = localStorage.getItem('schema-designer-gemini-apikey') || '';
-            const savedModel = localStorage.getItem('schema-designer-gemini-model') || 'gemini-3.5-flash';
+            const savedModel = localStorage.getItem('schema-designer-gemini-model') || 'gemini-3.6-flash';
             setApiKey(savedKey);
-            
-            const isPreset = PRESET_MODELS.some(m => m.value === savedModel);
+
+            setIsSaved(!!savedKey);
+            setFetchStatusMsg('');
+
+            const isPreset = DEFAULT_PRESET_MODELS.some(m => m.value === savedModel);
             if (isPreset) {
                 setSelectedModel(savedModel);
                 setIsCustom(false);
@@ -36,9 +76,12 @@ export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, set
                 setCustomModel(savedModel);
             }
 
-            setIsSaved(!!savedKey);
+            // モーダルオープン時に保存済みAPIキーがあれば自動最新化を実行
+            if (savedKey) {
+                loadModels(savedKey, false);
+            }
         }
-    }, [showModal]);
+    }, [showModal, loadModels]);
 
     if (!showModal) return null;
 
@@ -75,7 +118,7 @@ export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, set
             localStorage.removeItem('schema-designer-gemini-apikey');
             localStorage.removeItem('schema-designer-gemini-model');
             setApiKey('');
-            setSelectedModel('gemini-3.5-flash');
+            setSelectedModel('gemini-3.6-flash');
             setCustomModel('');
             setIsCustom(false);
             setIsSaved(false);
@@ -103,20 +146,38 @@ export const AiSettingsModal: React.FC<AiSettingsModalProps> = ({ showModal, set
                     </p>
                     
                     <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-gray-700 flex items-center gap-1">
-                            <Icon name="robot" className="w-3.5 h-3.5 text-blue-500" />
-                            使用モデル
-                        </label>
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                                <Icon name="robot" className="w-3.5 h-3.5 text-blue-500" />
+                                使用モデル
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => loadModels(apiKey, true)}
+                                disabled={isFetchingModels || !apiKey.trim()}
+                                className="text-[11px] text-blue-600 hover:text-blue-800 disabled:text-gray-400 font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Google APIから最新モデル一覧を取得・同期"
+                            >
+                                <RefreshCw className={`w-3 h-3 ${isFetchingModels ? 'animate-spin' : ''}`} />
+                                {isFetchingModels ? '最新化中...' : '最新モデルを取得'}
+                            </button>
+                        </div>
                         <select
                             value={selectedModel}
                             onChange={handleModelSelectChange}
                             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-xs bg-white transition-shadow cursor-pointer"
                         >
-                            {PRESET_MODELS.map(m => (
+                            {modelOptions.map(m => (
                                 <option key={m.value} value={m.value}>{m.label}</option>
                             ))}
                             <option value="custom">✏️ カスタムモデル名を直接入力</option>
                         </select>
+
+                        {fetchStatusMsg && (
+                            <span className={`text-[11px] font-medium ${fetchStatusMsg.includes('失敗') || fetchStatusMsg.includes('エラー') ? 'text-red-500' : 'text-gray-500'}`}>
+                                {fetchStatusMsg}
+                            </span>
+                        )}
 
                         {isCustom && (
                             <input

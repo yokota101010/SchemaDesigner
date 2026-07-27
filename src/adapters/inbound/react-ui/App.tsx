@@ -481,7 +481,7 @@ function SchemaDesigner() {
   const editingTable = tables.find(t => t.id === editingTableId) || null;
 
   return (
-    <div className="flex flex-col h-screen h-[100dvh] bg-gray-50 text-slate-800 font-sans overflow-hidden text-xs overscroll-none">
+    <div className="flex flex-col fixed inset-0 w-full h-full h-[100dvh] bg-gray-50 text-slate-800 font-sans overflow-hidden text-xs overscroll-none">
       <Header 
         projectName={projectName} setProjectName={setProjectName}
         handleNewProject={handleNewProject} handleImportClick={handleImportClick}

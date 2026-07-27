@@ -39,7 +39,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
             }}
         >
             <div 
-                className={`px-2 py-2 rounded-t ${table.isMinimized ? 'rounded-b' : ''} border-b border-gray-200 flex items-center justify-between cursor-move select-none group bg-white`}
+                className={`h-[40px] box-border px-2 py-2 rounded-t ${table.isMinimized ? 'rounded-b' : ''} border-b border-gray-200 flex items-center justify-between cursor-move select-none group bg-white`}
                 onMouseDown={(e) => handleDragStart(e, table.id)}
                 onTouchStart={(e) => handleDragStart(e, table.id)}
             >
@@ -83,8 +83,8 @@ export const TableNode: React.FC<TableNodeProps> = ({
             <div className={`${table.isMinimized ? 'rounded-b' : ''}`}> 
                 <table className="w-full text-xs text-left border-collapse min-w-max">
                     <thead className="text-gray-600 font-semibold select-none bg-gray-50/50">
-                        <tr>
-                            <th className="px-2 py-1.5 border-b border-gray-200 w-8 text-center text-gray-400">#</th>
+                        <tr className="h-[30px] box-border">
+                            <th className="px-2 py-1 border-b border-gray-200 w-8 text-center text-gray-400">#</th>
                             {getVisibleColumns(table).map(col => {
                                 const isDependent = col.attributeType === 'dependent';
                                 const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(col.id));
@@ -100,7 +100,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
                                 return (
                                     <th 
                                         key={col.id} 
-                                        className={`px-2 py-1.5 border-b border-gray-200 border-l border-gray-100 min-w-[80px] ${isDependent ? 'bg-orange-50/50 text-orange-800' : ''}`}
+                                        className={`px-2 py-1 border-b border-gray-200 border-l border-gray-100 min-w-[80px] ${isDependent ? 'bg-orange-50/50 text-orange-800' : ''}`}
                                         title={titleText}
                                     >
                                         <div className="flex items-center gap-1.5">
@@ -120,8 +120,8 @@ export const TableNode: React.FC<TableNodeProps> = ({
                     {!table.isMinimized && (
                         <tbody className="bg-white">
                             {table.rows.map((row, idx) => (
-                                <tr key={row.id} className="group hover:bg-blue-50/30">
-                                    <td className="px-2 py-1 border-b border-gray-100 text-center text-gray-300 select-none">{idx + 1}</td>
+                                <tr key={row.id} className="group hover:bg-blue-50/30 h-[26px] box-border">
+                                    <td className="px-2 py-0.5 border-b border-gray-100 text-center text-gray-300 select-none h-[26px]">{idx + 1}</td>
                                     {getVisibleColumns(table).map(col => {
                                         const isColUnique = table.uniqueKeys?.some(uq => uq.columnIds?.includes(col.id));
                                         return (
@@ -130,7 +130,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
                                                     type="text" 
                                                     value={row[col.id] || ''}
                                                     onChange={(e) => updateRowValue(table.id, row.id, col.id, e.target.value)}
-                                                    className="w-full h-full px-2 py-1 bg-transparent border-none outline-none focus:ring-inset focus:ring-1 focus:ring-blue-500 text-gray-700 placeholder-gray-200 leading-tight text-xs"
+                                                    className="w-full h-full px-2 py-0.5 bg-transparent border-none outline-none focus:ring-inset focus:ring-1 focus:ring-blue-500 text-gray-700 placeholder-gray-200 leading-tight text-xs h-[26px]"
                                                     placeholder="..."
                                                 />
                                             </td>

@@ -6,9 +6,9 @@ import { mergeMockRows, ensureReferentialIntegrity } from '../../utils/mockDataM
 
 const getModel = () => {
   if (typeof localStorage !== 'undefined') {
-    return localStorage.getItem('schema-designer-gemini-model') || 'gemini-3.5-flash';
+    return localStorage.getItem('schema-designer-gemini-model') || 'gemini-3.6-flash';
   }
-  return 'gemini-3.5-flash';
+  return 'gemini-3.6-flash';
 };
 
 export class GeminiAiClient implements AiClient {
@@ -427,5 +427,42 @@ export class GeminiAiClient implements AiClient {
       }
     }
     throw new Error("Fetch failed after maximum retries");
+  }
+
+  async fetchAvailableModels(apiKey: string): Promise<Array<{ value: string; label: string }>> {
+    if (!apiKey) {
+      throw new Error("APIキーが指定されていません。");
+    }
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`Gemini API models.list error:`, errText);
+      throw new Error(`モデル一覧の取得に失敗しました (${response.status})`);
+    }
+
+    const data = await response.json();
+    const rawModels: any[] = data.models || [];
+
+    // generateContent をサポートし、かつ 'gemini' を含むモデルを抽出
+    const geminiModels = rawModels.filter(m => {
+      const name: string = m.name || '';
+      const methods: string[] = m.supportedGenerationMethods || [];
+      return name.includes('gemini') && methods.includes('generateContent');
+    });
+
+    const modelOptions = geminiModels.map(m => {
+      const modelId = m.name.replace(/^models\//, '');
+      const displayName = m.displayName || modelId;
+      return {
+        value: modelId,
+        label: `${modelId} (${displayName})`
+      };
+    });
+
+    // 新しいモデル名が上位に来るよう降順ソート
+    modelOptions.sort((a, b) => b.value.localeCompare(a.value));
+
+    return modelOptions;
   }
 }

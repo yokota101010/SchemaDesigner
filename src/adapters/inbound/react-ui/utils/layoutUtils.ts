@@ -18,7 +18,7 @@ export const getTableRect = (
     
     const headerHeight = 40; 
     const colHeaderHeight = 30; 
-    const rowHeight = 24; 
+    const rowHeight = 26; 
     const footerHeight = 0; 
     
     let height = headerHeight + colHeaderHeight; 
@@ -218,7 +218,7 @@ export const calculateRelationshipPath = (
         const maxStartX = fromRect.x + Math.max(24, fromRect.width - 24);
         startX = Math.min(baseStartX, maxStartX);
 
-        startY = isChildBelow ? (fromRect.y + fromRect.height + 8) : (fromRect.y - 8);
+        startY = isChildBelow ? (fromRect.y + fromRect.height + 10) : (fromRect.y - 10);
         endX = toRect.x;
         endY = toRect.y + toRect.height / 2 + yOffset;
 

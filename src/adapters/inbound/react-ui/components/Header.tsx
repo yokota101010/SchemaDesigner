@@ -22,7 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
     onAiGenerateData, onOpenAiSettings, onOpenValueObjectSettings
 }) => {
     return (
-        <div className="bg-white border-b border-gray-200 px-3 py-2 shadow-sm flex items-center justify-between z-30 h-12 sticky top-0 flex-shrink-0 overflow-x-auto min-w-0">
+        <div className="bg-white border-b border-gray-200 px-3 py-1.5 shadow-sm flex items-center justify-between z-30 min-h-[48px] relative top-0 flex-shrink-0 overflow-x-auto min-w-0 touch-pan-x select-none">
             <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                     <Database className="w-5 h-5 text-blue-600" />
