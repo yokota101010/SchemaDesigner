@@ -7,6 +7,7 @@ export interface SchemaUseCase {
   updateTableDescription(tableId: string, description: string, tables: Table[]): Table[];
   updateTableOrderBy(tableId: string, orderBy: OrderBy, tables: Table[]): Table[];
   toggleTableMinimize(tableId: string, tables: Table[]): Table[];
+  toggleAllTablesMinimize(tables: Table[], activeTab?: 'main' | 'sub', forceMinimize?: boolean): Table[];
   updateTableViewPane(tableId: string, viewPane: 'main' | 'sub', tables: Table[]): Table[];
   
   addColumn(tableId: string, tables: Table[]): Table[];

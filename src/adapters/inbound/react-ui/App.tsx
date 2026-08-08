@@ -86,7 +86,7 @@ function SchemaDesigner() {
       editingTableId, setEditingTableId, connectionMode, setConnectionMode,
       selectedRelId, setSelectedRelId, syncRelationships,
       addTable, deleteTable, initiateDeleteTable, updateTableName, updateTableDescription, updateTableOrderBy,
-      toggleTableMinimize, updateTableViewPane, addColumn, deleteColumn, updateColumn,
+      toggleTableMinimize, toggleAllTablesMinimize, updateTableViewPane, addColumn, deleteColumn, updateColumn,
       moveColumn, addRow, deleteRow, updateRowValue,
       startConnectionMode, handleConnect, deleteRelationship,
       addFkRelationship, updateFkRelationshipParent, toggleFkMapping, updateFkMappingParentCol,
@@ -479,6 +479,8 @@ function SchemaDesigner() {
 
 
   const editingTable = tables.find(t => t.id === editingTableId) || null;
+  const visibleTables = tables.filter(t => activeTab === 'sub' ? t.viewPane === 'sub' : t.viewPane !== 'sub');
+  const allMinimized = visibleTables.length > 0 && visibleTables.every(t => t.isMinimized);
 
   return (
     <div className="flex flex-col fixed inset-0 w-full h-full h-[100dvh] bg-gray-50 text-slate-800 font-sans overflow-hidden text-xs overscroll-none">
@@ -490,6 +492,8 @@ function SchemaDesigner() {
         addTable={() => addTable(canvasRef)}
         onAiGenerateData={handleAiGenerateData} onOpenAiSettings={() => setShowAiSettingsModal(true)}
         onOpenValueObjectSettings={() => setShowValueObjectSettingsModal(true)}
+        allMinimized={allMinimized}
+        onToggleAllTablesMinimize={() => toggleAllTablesMinimize(activeTab)}
       />
       
       <Canvas 

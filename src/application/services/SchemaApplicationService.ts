@@ -1,7 +1,7 @@
 import { SchemaUseCase } from '../../ports/inbound/SchemaUseCase';
 import { Table, Relationship, Column, OrderBy, ValueObjectPreset, ValueObjectPropertyPreset } from '../../domain/models';
 import { syncRelationshipsWithTables, cleanRelationshipsForValueObjects, syncTableColumnsWithRelationships } from '../../domain/services/relationshipSync';
-import { calculateAlignSubTablesPlacements } from '../../domain/services/layoutAlign';
+import { calculateAlignSubTablesPlacements, adjustTablesYOnMinimizeToggle, toggleAllTablesMinimize } from '../../domain/services/layoutAlign';
 
 export class SchemaApplicationService implements SchemaUseCase {
   addTable(tables: Table[], viewOffset: { x: number; y: number }, canvasWidth: number, canvasHeight: number): Table[] {
@@ -59,7 +59,11 @@ export class SchemaApplicationService implements SchemaUseCase {
   }
 
   toggleTableMinimize(tableId: string, tables: Table[]): Table[] {
-    return tables.map(t => t.id === tableId ? { ...t, isMinimized: !t.isMinimized } : t);
+    return adjustTablesYOnMinimizeToggle(tableId, tables);
+  }
+
+  toggleAllTablesMinimize(tables: Table[], activeTab: 'main' | 'sub' = 'main', forceMinimize?: boolean): Table[] {
+    return toggleAllTablesMinimize(tables, activeTab, forceMinimize);
   }
 
   updateTableViewPane(tableId: string, viewPane: 'main' | 'sub', tables: Table[]): Table[] {

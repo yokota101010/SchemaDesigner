@@ -80,6 +80,11 @@ export const useSchemaState = (
     setTables(nextTables);
   }, [tables, schemaUseCase]);
 
+  const toggleAllTablesMinimize = useCallback((activeTab: 'main' | 'sub' = 'main', forceMinimize?: boolean) => {
+    const nextTables = schemaUseCase.toggleAllTablesMinimize(tables, activeTab, forceMinimize);
+    setTables(nextTables);
+  }, [tables, schemaUseCase]);
+
   // --- Column Operations ---
   const addColumn = useCallback((tableId: string) => {
     const nextTables = schemaUseCase.addColumn(tableId, tables);
@@ -206,7 +211,7 @@ export const useSchemaState = (
     selectedRelId, setSelectedRelId,
     syncRelationships,
     addTable, deleteTable, initiateDeleteTable,
-    updateTableName, updateTableDescription, updateTableOrderBy, toggleTableMinimize,
+    updateTableName, updateTableDescription, updateTableOrderBy, toggleTableMinimize, toggleAllTablesMinimize,
     updateTableViewPane,
     addColumn, deleteColumn, updateColumn,
     moveColumn,

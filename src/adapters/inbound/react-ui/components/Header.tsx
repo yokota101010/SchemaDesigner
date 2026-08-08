@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, FilePlus, FileUp, FileDown, FileText, Grid, Plus, Code, BookOpen, Settings, Workflow, Layers } from './Icons';
+import { Database, FilePlus, FileUp, FileDown, FileText, Grid, Plus, Code, BookOpen, Settings, Workflow, Layers, Eye, EyeOff } from './Icons';
 
 interface HeaderProps {
     projectName: string;
@@ -14,12 +14,15 @@ interface HeaderProps {
     onAiGenerateData: () => void;
     onOpenAiSettings: () => void;
     onOpenValueObjectSettings: () => void;
+    allMinimized?: boolean;
+    onToggleAllTablesMinimize: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
     projectName, setProjectName, handleNewProject, handleImportClick, handleExportMarkdown, fileInputRef, handleFileChange,
     onOpenAggregateModal, addTable,
-    onAiGenerateData, onOpenAiSettings, onOpenValueObjectSettings
+    onAiGenerateData, onOpenAiSettings, onOpenValueObjectSettings,
+    allMinimized = false, onToggleAllTablesMinimize
 }) => {
     return (
         <div className="bg-white border-b border-gray-200 px-3 py-1.5 shadow-sm flex items-center justify-between z-30 min-h-[48px] relative top-0 flex-shrink-0 overflow-x-auto min-w-0 touch-pan-x select-none">
@@ -76,6 +79,23 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             
             <div className="flex items-center gap-2">
+                {/* インスタンス表示/非表示切替 */}
+                <button 
+                    onClick={onToggleAllTablesMinimize} 
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded border transition-colors text-xs font-semibold cursor-pointer ${
+                        allMinimized 
+                            ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 shadow-sm' 
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                    title={allMinimized ? "全テーブルのインスタンス（データ行）を表示して間隔を広げる" : "全テーブルのインスタンス（データ行）を非表示にして間隔を詰める"}
+                >
+                    {allMinimized ? <Eye className="w-3.5 h-3.5 text-blue-600" /> : <EyeOff className="w-3.5 h-3.5 text-slate-500" />}
+                    <span>{allMinimized ? "インスタンス表示" : "インスタンス非表示"}</span>
+                </button>
+
+                {/* 区切り縦線 */}
+                <div className="h-5 w-px bg-gray-200 mx-0.5"></div>
+
                 {/* AIデータ生成セット (APIキー設定 + AIサンプル生成) - 緑系 */}
                 <div className="flex items-center gap-1 bg-emerald-50/50 border border-emerald-250 rounded-lg p-0.5">
                     <button 
@@ -133,8 +153,6 @@ export const Header: React.FC<HeaderProps> = ({
                     <Plus className="w-3.5 h-3.5" />
                     <span>テーブル追加</span>
                 </button>
-
-
             </div>
         </div>
     );
