@@ -1,4 +1,5 @@
 import { Table, Relationship } from '../../../../domain/models';
+import { isOneToOneRelationship } from '../../../../domain/services/relationshipSync';
 
 /**
  * テーブルの推定矩形サイズを算出します。
@@ -197,17 +198,62 @@ export const calculateRelationshipPath = (
             return (tr.y > fromRect.y) === isChildBelow;
         });
 
-        // グループ内のソート順:
-        // - 上グループ: 上にある子テーブル（Y座標が小さい）ほど親の左寄りから出線 (Y座標昇順: ya - yb)
-        // - 下グループ: 下にある子テーブル（Y座標が大きい）ほど親の左寄りから出線 (Y座標降順: yb - ya)
+        // 出線グループ内のソート順:
+        // 各関連線の到着点 Y 座標 (endY) を算出し、下方向なら降順 (endYB - endYA)、上方向なら昇順 (endYA - endYB) でソート。
+        // これにより、右折時に線が垂直線を横切ることなく、全関連線が平行に描画されて交差 (クロス) が完全に発生しなくなります。
+        const getRelEndY = (r: Relationship): number => {
+            const targetTable = tables.find(t => t.id === r.to);
+            if (!targetTable) return 0;
+            const targetRect = getRect(targetTable);
+
+            const incRels = relationships.filter(rx => rx.to === r.to);
+            const sortedIncRels = incRels.sort((a, b) => {
+                const tableA = tables.find(t => t.id === a.from);
+                const tableB = tables.find(t => t.id === b.from);
+                const rectA = tableA ? getRect(tableA) : null;
+                const rectB = tableB ? getRect(tableB) : null;
+
+                const centerYA = rectA ? rectA.y + rectA.height / 2 : 0;
+                const centerYB = rectB ? rectB.y + rectB.height / 2 : 0;
+                const centerYTo = targetRect.y + targetRect.height / 2;
+
+                const isAboveA = centerYA < centerYTo;
+                const isAboveB = centerYB < centerYTo;
+
+                if (isAboveA && !isAboveB) return -1;
+                if (!isAboveA && isAboveB) return 1;
+
+                const xa = rectA ? rectA.x : 0;
+                const xb = rectB ? rectB.x : 0;
+
+                if (isAboveA) {
+                    return xb - xa;
+                } else {
+                    return xa - xb;
+                }
+            });
+
+            const idx = sortedIncRels.findIndex(rx => rx.id === r.id);
+            const incTotal = incRels.length;
+            const gapInc = 15;
+            const yOff = (idx - (incTotal - 1) / 2) * gapInc;
+
+            return targetRect.y + targetRect.height / 2 + yOff;
+        };
+
+        const endYMap = new Map<string, number>();
+        sameDirOutgoingRels.forEach(r => {
+            endYMap.set(r.id, getRelEndY(r));
+        });
+
         sameDirOutgoingRels.sort((a, b) => {
-            const tableA = tables.find(t => t.id === a.to);
-            const tableB = tables.find(t => t.id === b.to);
-            const rectA = tableA ? getRect(tableA) : null;
-            const rectB = tableB ? getRect(tableB) : null;
-            const ya = rectA ? rectA.y : 0;
-            const yb = rectB ? rectB.y : 0;
-            return isChildBelow ? (yb - ya) : (ya - yb);
+            const endYA = endYMap.get(a.id) ?? 0;
+            const endYB = endYMap.get(b.id) ?? 0;
+            
+            if (endYA !== endYB) {
+                return isChildBelow ? (endYB - endYA) : (endYA - endYB);
+            }
+            return a.id.localeCompare(b.id);
         });
 
         const outgoingIndex = sameDirOutgoingRels.findIndex(r => r.id === rel.id);
@@ -229,47 +275,6 @@ export const calculateRelationshipPath = (
         pathData,
         isIdentifying: rel.type === 'identifying'
     };
-};
-
-/**
- * 2つのテーブル間のリレーションシップが1対1関係（主キー共有）であるか判定します。
- */
-export const isOneToOneRelationship = (rel: Relationship, tables: Table[]): boolean => {
-    const fromTable = tables.find(t => t.id === rel.from);
-    const toTable = tables.find(t => t.id === rel.to);
-    if (!fromTable || !toTable || !rel.mappings || rel.mappings.length === 0) return false;
-
-    // マッピングされた子テーブルのカラムIDリスト
-    const relChildColIds = rel.mappings.map(m => m.childColId);
-    
-    // 子テーブル側の一意性キー候補リスト（PKおよび各UKの構成カラムID配列のリスト）
-    const candidateKeys: string[][] = [];
-
-    // ① PKカラムセット
-    const pkColIds = toTable.columns.filter(c => c.isPk).map(c => c.id);
-    if (pkColIds.length > 0) {
-        candidateKeys.push(pkColIds);
-    }
-
-    // ② 各UKのカラムセット
-    if (toTable.uniqueKeys && toTable.uniqueKeys.length > 0) {
-        toTable.uniqueKeys.forEach(uq => {
-            if (uq.columnIds && uq.columnIds.length > 0) {
-                candidateKeys.push(uq.columnIds);
-            }
-        });
-    }
-
-    if (candidateKeys.length === 0) return false;
-
-    // マッピングされた子カラム集合が、いずれかの一意性キー候補（PKまたはUK）の完全集合と一致（カバー＆余計なカラムを含まない）しているか判定
-    const isMatchingAnyCandidate = candidateKeys.some(keyColIds => {
-        const coversKey = keyColIds.every(id => relChildColIds.includes(id));
-        const matchesOnlyKey = relChildColIds.every(id => keyColIds.includes(id));
-        return coversKey && matchesOnlyKey;
-    });
-
-    return isMatchingAnyCandidate;
 };
 
 /**

@@ -1,5 +1,5 @@
 import { Table } from '../models';
-import { getVisibleColumns } from '../../utils/schemaUtils';
+import { getVisibleColumns, getDisplayColumnName } from '../../utils/schemaUtils';
 
 /**
  * サブビューのテーブルをトポロジカル/名前順に整列した新しい配置座標を算出します。
@@ -21,7 +21,8 @@ export const calculateAlignSubTablesPlacements = (tables: Table[]): Table[] => {
     
     let estimatedColsWidth = 0;
     visibleCols.forEach(col => {
-      const nameLen = col.name ? col.name.length : 0;
+      const displayName = getDisplayColumnName(col, table);
+      const nameLen = displayName ? displayName.length : 0;
       const colWidth = Math.max(100, nameLen * 8 + 30);
       estimatedColsWidth += colWidth;
     });

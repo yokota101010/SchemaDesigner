@@ -138,6 +138,47 @@ export const cleanRelationshipsForValueObjects = (
 };
 
 /**
+ * 2つのテーブル間のリレーションシップが1対1関係（主キー共有）であるか判定します。
+ */
+export const isOneToOneRelationship = (rel: Relationship, tables: Table[]): boolean => {
+    const fromTable = tables.find(t => t.id === rel.from);
+    const toTable = tables.find(t => t.id === rel.to);
+    if (!fromTable || !toTable || !rel.mappings || rel.mappings.length === 0) return false;
+
+    // マッピングされた子テーブルのカラムIDリスト
+    const relChildColIds = rel.mappings.map(m => m.childColId);
+    
+    // 子テーブル側の一意性キー候補リスト（PKおよび各UKの構成カラムID配列のリスト）
+    const candidateKeys: string[][] = [];
+
+    // ① PKカラムセット
+    const pkColIds = toTable.columns.filter(c => c.isPk).map(c => c.id);
+    if (pkColIds.length > 0) {
+        candidateKeys.push(pkColIds);
+    }
+
+    // ② 各UKのカラムセット
+    if (toTable.uniqueKeys && toTable.uniqueKeys.length > 0) {
+        toTable.uniqueKeys.forEach(uq => {
+            if (uq.columnIds && uq.columnIds.length > 0) {
+                candidateKeys.push(uq.columnIds);
+            }
+        });
+    }
+
+    if (candidateKeys.length === 0) return false;
+
+    // マッピングされた子カラム集合が、いずれかの一意性キー候補（PKまたはUK）の完全集合と一致（カバー＆余計なカラムを含まない）しているか判定
+    const isMatchingAnyCandidate = candidateKeys.some(keyColIds => {
+        const coversKey = keyColIds.every(id => relChildColIds.includes(id));
+        const matchesOnlyKey = relChildColIds.every(id => keyColIds.includes(id));
+        return coversKey && matchesOnlyKey;
+    });
+
+    return isMatchingAnyCandidate;
+};
+
+/**
  * リレーション情報をもとに、テーブルのカラムの isFk / reference 属性を同期した新しいテーブル情報を生成します。
  */
 export const syncTableColumnsWithRelationships = (

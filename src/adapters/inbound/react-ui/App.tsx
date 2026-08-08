@@ -456,19 +456,25 @@ function SchemaDesigner() {
   }, [tables, relationships, valueObjects, projectName, aggregates, aggregateData, aggregateTableOrder]);
 
   useEffect(() => {
-    const onDragMove = (e: any) => dragState.handleDragMove(e, canvasRef);
+    const onDragMove = (e: any) => {
+      window.getSelection()?.removeAllRanges();
+      dragState.handleDragMove(e, canvasRef);
+    };
     if (dragState.draggingId || dragState.isPanning) {
+      document.body.style.userSelect = 'none';
       window.addEventListener('mousemove', onDragMove);
       window.addEventListener('mouseup', dragState.handleDragEnd);
       window.addEventListener('touchmove', onDragMove, { passive: false });
       window.addEventListener('touchend', dragState.handleDragEnd);
     } else {
+      document.body.style.userSelect = '';
       window.removeEventListener('mousemove', onDragMove);
       window.removeEventListener('mouseup', dragState.handleDragEnd);
       window.removeEventListener('touchmove', onDragMove);
       window.removeEventListener('touchend', dragState.handleDragEnd);
     }
     return () => {
+      document.body.style.userSelect = '';
       window.removeEventListener('mousemove', onDragMove);
       window.removeEventListener('mouseup', dragState.handleDragEnd);
       window.removeEventListener('touchmove', onDragMove);

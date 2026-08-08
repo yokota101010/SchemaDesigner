@@ -40,7 +40,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             ref={canvasRef}
             onMouseDown={(e) => handleDragStart(e, null)} 
             onTouchStart={(e) => handleDragStart(e, null)}
-            className={`relative flex-1 overflow-hidden bg-slate-50 ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+            className={`relative flex-1 overflow-hidden bg-slate-50 select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
             style={{ 
                 backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', 
                 backgroundSize: '20px 20px',

@@ -1,7 +1,7 @@
 import React from 'react';
 import { GripHorizontal, Plus, Settings, Trash2, ChevronDown, ChevronUp, Key, KeyRound, LinkIcon, FunctionSquare, X } from './Icons';
 import { Table } from '../../../domain/models';
-import { getVisibleColumns } from '../../../../utils/schemaUtils';
+import { getVisibleColumns, getDisplayColumnName } from '../../../../utils/schemaUtils';
 
 interface TableNodeProps {
     table: Table;
@@ -27,7 +27,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
             id={`table-${table.id}`}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
-            className={`absolute flex flex-col bg-white rounded shadow-lg border transition-shadow duration-200 z-10
+            className={`absolute flex flex-col bg-white rounded shadow-lg border transition-shadow duration-200 z-10 select-none
                 ${connectionMode?.fromId === table.id ? 'ring-2 ring-blue-500 shadow-blue-200' : 'hover:shadow-xl border-gray-300'}
             `}
             style={{ 
@@ -108,7 +108,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
                                             {isColUnique && <KeyRound className="w-3 h-3 text-purple-500 flex-shrink-0" />}
                                             {col.isFk && <LinkIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />}
                                             {isDependent && <FunctionSquare className="w-3 h-3 text-orange-500 flex-shrink-0" />}
-                                            <span>{col.name}</span>
+                                            <span>{getDisplayColumnName(col, table)}</span>
                                         </div>
                                     </th>
                                 );

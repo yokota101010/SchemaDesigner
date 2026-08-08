@@ -1,7 +1,7 @@
 import React from 'react';
 import { Key, Eye, EyeOff, Trash2 } from '../../Icons';
 import { DATA_TYPES, ATTRIBUTE_TYPES } from '../../../../../../constants';
-import { Table, Column, Relationship, ValueObjectPreset } from '../../../../../../domain/models';
+import { isVoParentColumn } from '../../../../../../utils/schemaUtils';
 
 interface ColumnRowProps {
     col: Column;
@@ -45,7 +45,7 @@ export const ColumnRow: React.FC<ColumnRowProps> = ({
     const isColUnique = tableUqs.some(uq => uq.columnIds?.includes(col.id));
     const isMandatory = col.isPk || isColUnique || col.isFk;
     const isVisible = col.isVisible !== false;
-    const isVoParent = editingTable.columns.some(c => c.parentColumnId === col.id);
+    const isVoParent = isVoParentColumn(editingTable, col.id);
 
     return (
         <tr className={`hover:bg-gray-50 group ${col.isVoProperty ? 'bg-slate-50/50' : ''}`}>
@@ -79,12 +79,21 @@ export const ColumnRow: React.FC<ColumnRowProps> = ({
 
             {/* PK */}
             <td className="px-3 py-1.5 text-center">
-                <button
-                    onClick={() => updateColumn(editingTable.id, col.id, 'isPk', !col.isPk)}
-                    className={`p-1 rounded transition-colors ${col.isPk ? 'text-yellow-500 bg-yellow-50' : 'text-gray-300 hover:text-gray-400'}`}
-                >
-                    <Key className="w-4 h-4" />
-                </button>
+                {col.isVoProperty ? (
+                    col.isPk ? (
+                        <span className="text-yellow-500 font-bold text-xs select-none" title="親の値オブジェクト全体がPKに設定されています">✓</span>
+                    ) : (
+                        <span className="text-gray-300">-</span>
+                    )
+                ) : (
+                    <button
+                        onClick={() => updateColumn(editingTable.id, col.id, 'isPk', !col.isPk)}
+                        className={`p-1 rounded transition-colors ${col.isPk ? 'text-yellow-500 bg-yellow-50' : 'text-gray-300 hover:text-gray-400'}`}
+                        title={col.isPk ? "主キー(PK)解除" : "主キー(PK)に設定"}
+                    >
+                        <Key className="w-4 h-4" />
+                    </button>
+                )}
             </td>
 
             {/* カラム名 */}
@@ -131,7 +140,7 @@ export const ColumnRow: React.FC<ColumnRowProps> = ({
 
             {/* 区分 */}
             <td className="px-3 py-1.5 text-center">
-                {isVoParent ? (
+                {col.isVoProperty ? (
                     <span className="text-gray-300">-</span>
                 ) : (
                     <select
@@ -255,13 +264,21 @@ export const ColumnRow: React.FC<ColumnRowProps> = ({
 
                 return (
                     <td key={uq.id} className="px-3 py-1.5 border-l border-gray-200 bg-purple-50/10 text-center">
-                        <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => toggleUniqueKeyMapping(editingTable.id, uq.id, col.id, e.target.checked)}
-                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 cursor-pointer"
-                            title="このカラムをユニークキー制約に含める"
-                        />
+                        {col.isVoProperty ? (
+                            isChecked ? (
+                                <span className="text-purple-500 font-bold text-xs select-none" title="親の値オブジェクト全体がUQに設定されています">✓</span>
+                            ) : (
+                                <span className="text-gray-300">-</span>
+                            )
+                        ) : (
+                            <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => toggleUniqueKeyMapping(editingTable.id, uq.id, col.id, e.target.checked)}
+                                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 cursor-pointer"
+                                title="このカラムをユニークキー制約に含める"
+                            />
+                        )}
                     </td>
                 );
             })}

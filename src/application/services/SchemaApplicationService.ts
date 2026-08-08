@@ -2,6 +2,7 @@ import { SchemaUseCase } from '../../ports/inbound/SchemaUseCase';
 import { Table, Relationship, Column, OrderBy, ValueObjectPreset, ValueObjectPropertyPreset } from '../../domain/models';
 import { syncRelationshipsWithTables, cleanRelationshipsForValueObjects, syncTableColumnsWithRelationships } from '../../domain/services/relationshipSync';
 import { calculateAlignSubTablesPlacements, adjustTablesYOnMinimizeToggle, toggleAllTablesMinimize } from '../../domain/services/layoutAlign';
+import { formatVoColumnName } from '../../utils/schemaUtils';
 
 export class SchemaApplicationService implements SchemaUseCase {
   addTable(tables: Table[], viewOffset: { x: number; y: number }, canvasWidth: number, canvasHeight: number): Table[] {
@@ -149,6 +150,21 @@ export class SchemaApplicationService implements SchemaUseCase {
       if (t.id === tableId) {
         let updatedCols = t.columns.map(c => c.id === colId ? { ...c, [field]: value } : c);
         
+        if (field === 'isPk') {
+          const targetCol = t.columns.find(c => c.id === colId);
+          if (targetCol) {
+            if (targetCol.isVoProperty) {
+              return t;
+            }
+            updatedCols = updatedCols.map(c => {
+              if (c.id === colId || c.parentColumnId === colId) {
+                return { ...c, isPk: value };
+              }
+              return c;
+            });
+          }
+        }
+
         if (field === 'type') {
           const targetCol = updatedCols.find(c => c.id === colId);
           if (targetCol) {
@@ -170,11 +186,12 @@ export class SchemaApplicationService implements SchemaUseCase {
               const voPreset = valueObjects.find(vo => vo.name === value);
               if (voPreset) {
                 const parentIndex = updatedCols.findIndex(c => c.id === colId);
+                const isParentPk = !!targetCol.isPk;
                 const newChildren: Column[] = voPreset.properties.map((prop: ValueObjectPropertyPreset) => ({
                   id: `col_vo_${colId}_${prop.name}`,
-                  name: `${targetCol.name}_${prop.name}`,
+                  name: formatVoColumnName(prop.name, targetCol.name),
                   type: prop.type,
-                  isPk: false,
+                  isPk: isParentPk,
                   isUnique: false,
                   isFk: false,
                   attributeType: 'independent',
@@ -191,6 +208,21 @@ export class SchemaApplicationService implements SchemaUseCase {
           }
         }
         
+        if (field === 'attributeType') {
+          const targetCol = t.columns.find(c => c.id === colId);
+          if (targetCol) {
+            if (targetCol.isVoProperty) {
+              return t;
+            }
+            updatedCols = updatedCols.map(c => {
+              if (c.id === colId || c.parentColumnId === colId) {
+                return { ...c, attributeType: value };
+              }
+              return c;
+            });
+          }
+        }
+
         if (field === 'name') {
           const targetCol = updatedCols.find(c => c.id === colId);
           if (targetCol) {
@@ -200,7 +232,7 @@ export class SchemaApplicationService implements SchemaUseCase {
                 if (c.parentColumnId === colId && c.isVoProperty) {
                   return {
                     ...c,
-                    name: `${value}_${c.voPropertyName}`
+                    name: formatVoColumnName(c.voPropertyName || '', value)
                   };
                 }
                 return c;
@@ -214,7 +246,7 @@ export class SchemaApplicationService implements SchemaUseCase {
         );
 
         updatedCols = updatedCols.map(c => {
-          if (parentColIds.has(c.id)) {
+          if (parentColIds.has(c.id) || c.parentColumnId) {
             return {
               ...c,
               attributeType: 'independent',
@@ -485,14 +517,26 @@ export class SchemaApplicationService implements SchemaUseCase {
   toggleUniqueKeyMapping(tableId: string, uqId: string, colId: string, isChecked: boolean, tables: Table[]): Table[] {
     return tables.map(t => {
       if (t.id === tableId) {
+        const targetCol = t.columns.find(c => c.id === colId);
+        if (!targetCol) return t;
+
+        // 子カラム単体での変更は無効化
+        if (targetCol.isVoProperty) return t;
+
+        // 連動対象のID群（親カラムID + 配下の子カラムID群）
+        const childColIds = t.columns.filter(c => c.parentColumnId === colId).map(c => c.id);
+        const targetIds = [colId, ...childColIds];
+
         const uqs = t.uniqueKeys || [];
         const updatedUqs = uqs.map(uq => {
           if (uq.id === uqId) {
             let colIds = uq.columnIds ? [...uq.columnIds] : [];
             if (isChecked) {
-              if (!colIds.includes(colId)) colIds.push(colId);
+              targetIds.forEach(id => {
+                if (!colIds.includes(id)) colIds.push(id);
+              });
             } else {
-              colIds = colIds.filter(id => id !== colId);
+              colIds = colIds.filter(id => !targetIds.includes(id));
             }
             return { ...uq, columnIds: colIds };
           }
@@ -552,7 +596,7 @@ export class SchemaApplicationService implements SchemaUseCase {
 
             finalCols.push({
               id: `col_vo_${col.id}_${prop.name}`,
-              name: `${col.name}_${prop.name}`,
+              name: formatVoColumnName(prop.name, col.name),
               type: propType,
               isPk: backup?.isPk ?? false,
               isUnique: backup?.isUnique ?? false,
