@@ -88,6 +88,66 @@ export const calculateAlignSubTablesPlacements = (tables: Table[]): Table[] => {
 };
 
 /**
+ * 対象テーブルのY座標より下にある、同じペインのテーブル群のY座標を shiftY だけ移動します。
+ */
+export const shiftTablesBelow = (targetTableId: string, tables: Table[], shiftY: number): Table[] => {
+  if (shiftY === 0) return tables;
+  const targetTable = tables.find(t => t.id === targetTableId);
+  if (!targetTable) return tables;
+
+  const targetViewPane = targetTable.viewPane;
+  const targetY = targetTable.y;
+
+  return tables.map(t => {
+    if (t.id === targetTableId) return t;
+
+    const isSamePane = (t.viewPane === targetViewPane) || (!t.viewPane && !targetViewPane) || (t.viewPane !== 'sub' && targetViewPane !== 'sub');
+    if (isSamePane && t.y > targetY) {
+      return { ...t, y: Math.max(0, t.y + shiftY) };
+    }
+    return t;
+  });
+};
+
+/**
+ * インスタンス（データ行）の追加に伴い、その下にあるテーブルのY座標を自動調整します。
+ */
+export const adjustTablesYOnRowAddition = (tableId: string, tables: Table[]): Table[] => {
+  const targetTable = tables.find(t => t.id === tableId);
+  if (!targetTable) return tables;
+
+  const ROW_HEIGHT = 26;
+  let shiftY = ROW_HEIGHT;
+
+  // 追加前の時点で非表示（折りたたみ）だった場合、行追加に伴い展開状態（isMinimized: false）になるため、
+  // (追加後の行数) * ROW_HEIGHT 分、直下のテーブルを押し下げる
+  if (targetTable.isMinimized) {
+    const nextRowCount = targetTable.rows.length + 1;
+    shiftY = nextRowCount * ROW_HEIGHT;
+  }
+
+  return shiftTablesBelow(tableId, tables, shiftY);
+};
+
+/**
+ * インスタンス（データ行）の削除に伴い、その下にあるテーブルのY座標を自動調整します。
+ */
+export const adjustTablesYOnRowDeletion = (tableId: string, tables: Table[]): Table[] => {
+  const targetTable = tables.find(t => t.id === tableId);
+  if (!targetTable) return tables;
+
+  // 削除前の時点で非表示（折りたたみ）の場合、見た目の高さ変化はないためシフト不要
+  if (targetTable.isMinimized) {
+    return tables;
+  }
+
+  const ROW_HEIGHT = 26;
+  const shiftY = -ROW_HEIGHT;
+
+  return shiftTablesBelow(tableId, tables, shiftY);
+};
+
+/**
  * 特定のテーブルの isMinimized トグルに伴い、その下にあるテーブルのY座標を自動調整します。
  */
 export const adjustTablesYOnMinimizeToggle = (tableId: string, tables: Table[]): Table[] => {
@@ -97,30 +157,17 @@ export const adjustTablesYOnMinimizeToggle = (tableId: string, tables: Table[]):
   const nextMinimized = !targetTable.isMinimized;
   const rowCount = targetTable.rows.length;
 
-  // データ行数が0の場合は高さの変化がないため単純にisMinimizedのみ変更
+  const updatedTables = tables.map(t => t.id === tableId ? { ...t, isMinimized: nextMinimized } : t);
+
   if (rowCount === 0) {
-    return tables.map(t => t.id === tableId ? { ...t, isMinimized: nextMinimized } : t);
+    return updatedTables;
   }
 
-  // 1行あたり26pxの高さ変化
   const ROW_HEIGHT = 26;
   const deltaY = rowCount * ROW_HEIGHT;
   const shiftY = nextMinimized ? -deltaY : deltaY;
 
-  const targetViewPane = targetTable.viewPane;
-  const targetY = targetTable.y;
-
-  return tables.map(t => {
-    if (t.id === tableId) {
-      return { ...t, isMinimized: nextMinimized };
-    }
-    // 対象テーブルと同じビューペインで、かつY座標が下にあるテーブルをシフト
-    const isSamePane = (t.viewPane === targetViewPane) || (!t.viewPane && !targetViewPane) || (t.viewPane !== 'sub' && targetViewPane !== 'sub');
-    if (isSamePane && t.y > targetY) {
-      return { ...t, y: Math.max(0, t.y + shiftY) };
-    }
-    return t;
-  });
+  return shiftTablesBelow(tableId, updatedTables, shiftY);
 };
 
 /**

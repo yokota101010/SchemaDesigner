@@ -1,7 +1,7 @@
 import { SchemaUseCase } from '../../ports/inbound/SchemaUseCase';
 import { Table, Relationship, Column, OrderBy, ValueObjectPreset, ValueObjectPropertyPreset } from '../../domain/models';
 import { syncRelationshipsWithTables, cleanRelationshipsForValueObjects, syncTableColumnsWithRelationships } from '../../domain/services/relationshipSync';
-import { calculateAlignSubTablesPlacements, adjustTablesYOnMinimizeToggle, toggleAllTablesMinimize } from '../../domain/services/layoutAlign';
+import { calculateAlignSubTablesPlacements, adjustTablesYOnMinimizeToggle, toggleAllTablesMinimize, adjustTablesYOnRowAddition, adjustTablesYOnRowDeletion } from '../../domain/services/layoutAlign';
 import { formatVoColumnName } from '../../utils/schemaUtils';
 
 export class SchemaApplicationService implements SchemaUseCase {
@@ -351,7 +351,8 @@ export class SchemaApplicationService implements SchemaUseCase {
 
 
   addRow(tableId: string, tables: Table[]): Table[] {
-    return tables.map(t => {
+    const adjustedYTables = adjustTablesYOnRowAddition(tableId, tables);
+    return adjustedYTables.map(t => {
       if (t.id === tableId) {
         const newRow: any = { id: `row_${Date.now()}` };
         t.columns.forEach(col => newRow[col.id] = '');
@@ -366,7 +367,8 @@ export class SchemaApplicationService implements SchemaUseCase {
   }
 
   deleteRow(tableId: string, rowId: string, tables: Table[]): Table[] {
-    return tables.map(t => {
+    const adjustedYTables = adjustTablesYOnRowDeletion(tableId, tables);
+    return adjustedYTables.map(t => {
       if (t.id === tableId) {
         return { ...t, rows: t.rows.filter(r => r.id !== rowId) };
       }
